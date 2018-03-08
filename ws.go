@@ -139,7 +139,7 @@ func (c *wsConn) SetWriteDeadline(t time.Time) error {
 func (h *handlerService) handleWS(conn *websocket.Conn) {
 	c, err := newWSConn(conn)
 	if err != nil {
-		logger.Println(err)
+		logger.Error(err)
 		return
 	}
 	h.handle(c)

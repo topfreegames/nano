@@ -116,11 +116,11 @@ func (a *agent) Push(route string, v interface{}) error {
 	if env.debug {
 		switch d := v.(type) {
 		case []byte:
-			logger.Println(fmt.Sprintf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%dbytes",
-				a.session.ID(), a.session.UID(), route, len(d)))
+			logger.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%dbytes",
+				a.session.ID(), a.session.UID(), route, len(d))
 		default:
-			logger.Println(fmt.Sprintf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%+v",
-				a.session.ID(), a.session.UID(), route, v))
+			logger.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%+v",
+				a.session.ID(), a.session.UID(), route, v)
 		}
 	}
 
@@ -151,11 +151,11 @@ func (a *agent) ResponseMID(mid uint, v interface{}) error {
 	if env.debug {
 		switch d := v.(type) {
 		case []byte:
-			logger.Println(fmt.Sprintf("Type=Response, ID=%d, UID=%d, MID=%d, Data=%dbytes",
-				a.session.ID(), a.session.UID(), mid, len(d)))
+			logger.Debugf("Type=Response, ID=%d, UID=%d, MID=%d, Data=%dbytes",
+				a.session.ID(), a.session.UID(), mid, len(d))
 		default:
-			logger.Println(fmt.Sprintf("Type=Response, ID=%d, UID=%d, MID=%d, Data=%+v",
-				a.session.ID(), a.session.UID(), mid, v))
+			logger.Infof("Type=Response, ID=%d, UID=%d, MID=%d, Data=%+v",
+				a.session.ID(), a.session.UID(), mid, v)
 		}
 	}
 
@@ -171,10 +171,8 @@ func (a *agent) Close() error {
 	}
 	a.setStatus(statusClosed)
 
-	if env.debug {
-		logger.Println(fmt.Sprintf("Session closed, ID=%d, UID=%d, IP=%s",
-			a.session.ID(), a.session.UID(), a.conn.RemoteAddr()))
-	}
+	logger.Debugf("Session closed, ID=%d, UID=%d, IP=%s",
+		a.session.ID(), a.session.UID(), a.conn.RemoteAddr())
 
 	// prevent closing closed channel
 	select {
@@ -216,9 +214,7 @@ func (a *agent) write() {
 		close(a.chSend)
 		close(chWrite)
 		a.Close()
-		if env.debug {
-			logger.Println(fmt.Sprintf("Session write goroutine exit, SessionID=%d, UID=%d", a.session.ID(), a.session.UID()))
-		}
+		logger.Debugf("Session write goroutine exit, SessionID=%d, UID=%d", a.session.ID(), a.session.UID())
 	}()
 
 	for {
@@ -226,7 +222,7 @@ func (a *agent) write() {
 		case <-ticker.C:
 			deadline := time.Now().Add(-2 * env.heartbeat).Unix()
 			if a.lastAt < deadline {
-				logger.Println(fmt.Sprintf("Session heartbeat timeout, LastTime=%d, Deadline=%d", a.lastAt, deadline))
+				logger.Debugf("Session heartbeat timeout, LastTime=%d, Deadline=%d", a.lastAt, deadline)
 				return
 			}
 			chWrite <- hbd
@@ -234,14 +230,14 @@ func (a *agent) write() {
 		case data := <-chWrite:
 			// close agent while low-level conn broken
 			if _, err := a.conn.Write(data); err != nil {
-				logger.Println(err.Error())
+				logger.Error(err.Error())
 				return
 			}
 
 		case data := <-a.chSend:
 			payload, err := serializeOrRaw(data.payload)
 			if err != nil {
-				logger.Println(err.Error())
+				logger.Error(err.Error())
 				break
 			}
 
@@ -249,7 +245,7 @@ func (a *agent) write() {
 				for _, h := range Pipeline.Outbound.handlers {
 					payload, err = h(a.session, payload)
 					if err != nil {
-						logger.Println("broken pipeline", err.Error())
+						logger.Debugf("broken pipeline, error: %s", err.Error())
 						break
 					}
 				}
@@ -264,14 +260,14 @@ func (a *agent) write() {
 			}
 			em, err := m.Encode()
 			if err != nil {
-				logger.Println(err.Error())
+				logger.Error(err.Error())
 				break
 			}
 
 			// packet encode
 			p, err := codec.Encode(packet.Data, em)
 			if err != nil {
-				logger.Println(err)
+				logger.Error(err)
 				break
 			}
 			chWrite <- p

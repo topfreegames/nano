@@ -93,9 +93,7 @@ func (c *Group) Multicast(route string, v interface{}, filter SessionFilter) err
 		return err
 	}
 
-	if env.debug {
-		logger.Println(fmt.Sprintf("Type=Multicast Route=%s, Data=%+v", route, v))
-	}
+	logger.Debugf("Type=Multicast Route=%s, Data=%+v", route, v)
 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -105,7 +103,7 @@ func (c *Group) Multicast(route string, v interface{}, filter SessionFilter) err
 			continue
 		}
 		if err = s.Push(route, data); err != nil {
-			logger.Println(err.Error())
+			logger.Error(err.Error())
 		}
 	}
 
@@ -123,16 +121,14 @@ func (c *Group) Broadcast(route string, v interface{}) error {
 		return err
 	}
 
-	if env.debug {
-		logger.Println(fmt.Sprintf("Type=Broadcast Route=%s, Data=%+v", route, v))
-	}
+	logger.Debug(fmt.Sprintf("Type=Broadcast Route=%s, Data=%+v", route, v))
 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	for _, s := range c.sessions {
 		if err = s.Push(route, data); err != nil {
-			logger.Println(fmt.Sprintf("Session push message error, ID=%d, UID=%d, Error=%s", s.ID(), s.UID(), err.Error()))
+			logger.Errorf("Session push message error, ID=%d, UID=%d, Error=%s", s.ID(), s.UID(), err.Error())
 		}
 	}
 
@@ -151,9 +147,7 @@ func (c *Group) Add(session *session.Session) error {
 		return ErrClosedGroup
 	}
 
-	if env.debug {
-		logger.Println(fmt.Sprintf("Add session to group %s, ID=%d, UID=%d", c.name, session.ID(), session.UID()))
-	}
+	logger.Debug(fmt.Sprintf("Add session to group %s, ID=%d, UID=%d", c.name, session.ID(), session.UID()))
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -174,9 +168,7 @@ func (c *Group) Leave(s *session.Session) error {
 		return ErrClosedGroup
 	}
 
-	if env.debug {
-		logger.Println(fmt.Sprintf("Remove session from group %s, UID=%d", c.name, s.UID()))
-	}
+	logger.Debug(fmt.Sprintf("Remove session from group %s, UID=%d", c.name, s.UID()))
 
 	c.mu.Lock()
 	defer c.mu.Unlock()

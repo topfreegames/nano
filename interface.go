@@ -81,6 +81,7 @@ func SetDictionary(dict map[string]uint16) {
 	message.SetDictionary(dict)
 }
 
+// SetWSPath sets the websocket path
 func SetWSPath(path string) {
 	env.wsPath = path
 }

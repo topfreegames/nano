@@ -47,7 +47,7 @@ func startupComponents() {
 	// register all components
 	for _, c := range comps {
 		if err := handler.register(c.comp, c.opts); err != nil {
-			logger.Println(err.Error())
+			logger.Error(err.Error())
 		}
 	}
 

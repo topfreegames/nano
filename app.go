@@ -21,16 +21,16 @@
 package nano
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/gorilla/websocket"
-	"time"
 	"strings"
+	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func listen(addr string, isWs bool) {
@@ -52,19 +52,19 @@ func listen(addr string, isWs bool) {
 		}
 	}()
 
-	logger.Println(fmt.Sprintf("starting application %s, listen at %s", app.name, addr))
+	logger.Infof("starting application %s, listen at %s", app.name, addr)
 	sg := make(chan os.Signal)
 	signal.Notify(sg, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL)
 
 	// stop server
 	select {
 	case <-env.die:
-		logger.Println("The app will shutdown in a few seconds")
+		logger.Warn("The app will shutdown in a few seconds")
 	case s := <-sg:
-		logger.Println("got signal", s)
+		logger.Warn("got signal", s)
 	}
 
-	logger.Println("server is stopping...")
+	logger.Warn("server is stopping...")
 
 	// shutdown all components registered by application, that
 	// call by reverse order against register
@@ -82,7 +82,7 @@ func listenAndServe(addr string) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			logger.Println(err.Error())
+			logger.Error(err.Error())
 			continue
 		}
 
@@ -97,10 +97,10 @@ func listenAndServeWS(addr string) {
 		CheckOrigin:     env.checkOrigin,
 	}
 
-	http.HandleFunc("/"+strings.TrimPrefix(env.wsPath,"/"), func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/"+strings.TrimPrefix(env.wsPath, "/"), func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			logger.Println(fmt.Sprintf("Upgrade failure, URI=%s, Error=%s", r.RequestURI, err.Error()))
+			logger.Errorf("Upgrade failure, URI=%s, Error=%s", r.RequestURI, err.Error())
 			return
 		}
 

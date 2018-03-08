@@ -100,14 +100,14 @@ func newHandlerService() *handlerService {
 func pcall(method reflect.Method, args []reflect.Value) {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Println(fmt.Sprintf("nano/dispatch: %v", err))
-			println(stack())
+			logger.Errorf("nano/dispatch: %v", err)
+			logger.Error(stack())
 		}
 	}()
 
 	if r := method.Func.Call(args); len(r) > 0 {
 		if err := r[0].Interface(); err != nil {
-			logger.Println(err.(error).Error())
+			logger.Error(err.(error).Error())
 		}
 	}
 }
@@ -116,8 +116,8 @@ func pcall(method reflect.Method, args []reflect.Value) {
 func pinvoke(fn func()) {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Println(fmt.Sprintf("nano/invoke: %v", err))
-			println(stack())
+			logger.Errorf("nano/invoke: %v", err)
+			logger.Error(stack())
 		}
 	}()
 
@@ -127,8 +127,8 @@ func pinvoke(fn func()) {
 func onSessionClosed(s *session.Session) {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Println(fmt.Sprintf("nano/onSessionClosed: %v", err))
-			println(stack())
+			logger.Errorf("nano/onSessionClosed: %v", err)
+			logger.Error(stack())
 		}
 	}()
 
@@ -207,16 +207,12 @@ func (h *handlerService) handle(conn net.Conn) {
 	// startup write goroutine
 	go agent.write()
 
-	if env.debug {
-		logger.Println(fmt.Sprintf("New session established: %s", agent.String()))
-	}
+	logger.Debugf("New session established: %s", agent.String())
 
 	// guarantee agent related resource be destroyed
 	defer func() {
 		agent.Close()
-		if env.debug {
-			logger.Println(fmt.Sprintf("Session read goroutine exit, SessionID=%d, UID=%d", agent.session.ID(), agent.session.UID()))
-		}
+		logger.Debugf("Session read goroutine exit, SessionID=%d, UID=%d", agent.session.ID(), agent.session.UID())
 	}()
 
 	// read loop
@@ -224,14 +220,14 @@ func (h *handlerService) handle(conn net.Conn) {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			logger.Println(fmt.Sprintf("Read message error: %s, session will be closed immediately", err.Error()))
+			logger.Debugf("Read message error: %s, session will be closed immediately", err.Error())
 			return
 		}
 
 		// TODO(warning): decoder use slice for performance, packet data should be copy before next Decode
 		packets, err := agent.decoder.Decode(buf[:n])
 		if err != nil {
-			logger.Println(err.Error())
+			logger.Error(err.Error())
 			return
 		}
 
@@ -242,7 +238,7 @@ func (h *handlerService) handle(conn net.Conn) {
 		// process all packet
 		for i := range packets {
 			if err := h.processPacket(agent, packets[i]); err != nil {
-				logger.Println(err.Error())
+				logger.Error(err.Error())
 				return
 			}
 		}
@@ -257,15 +253,11 @@ func (h *handlerService) processPacket(agent *agent, p *packet.Packet) error {
 		}
 
 		agent.setStatus(statusHandshake)
-		if env.debug {
-			logger.Println(fmt.Sprintf("Session handshake Id=%d, Remote=%s", agent.session.ID(), agent.conn.RemoteAddr()))
-		}
+		logger.Debugf("Session handshake Id=%d, Remote=%s", agent.session.ID(), agent.conn.RemoteAddr())
 
 	case packet.HandshakeAck:
 		agent.setStatus(statusWorking)
-		if env.debug {
-			logger.Println(fmt.Sprintf("Receive handshake ACK Id=%d, Remote=%s", agent.session.ID(), agent.conn.RemoteAddr()))
-		}
+		logger.Debugf("Receive handshake ACK Id=%d, Remote=%s", agent.session.ID(), agent.conn.RemoteAddr())
 
 	case packet.Data:
 		if agent.status() < statusWorking {
@@ -298,7 +290,7 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 
 	handler, ok := h.handlers[msg.Route]
 	if !ok {
-		logger.Println(fmt.Sprintf("nano/handler: %s not found(forgot registered?)", msg.Route))
+		logger.Warnf("nano/handler: %s not found(forgot registered?)", msg.Route)
 		return
 	}
 
@@ -308,7 +300,7 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 		for _, h := range Pipeline.Inbound.handlers {
 			payload, err = h(agent.session, payload)
 			if err != nil {
-				logger.Println(fmt.Sprintf("nano/handler: broken pipeline: %s", err.Error()))
+				logger.Errorf("nano/handler: broken pipeline: %s", err.Error())
 				return
 			}
 		}
@@ -321,14 +313,12 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 		data = reflect.New(handler.Type.Elem()).Interface()
 		err := serializer.Unmarshal(payload, data)
 		if err != nil {
-			logger.Println("deserialize error", err.Error())
+			logger.Error("deserialize error", err.Error())
 			return
 		}
 	}
 
-	if env.debug {
-		logger.Println(fmt.Sprintf("UID=%d, Message={%s}, Data=%+v", agent.session.UID(), msg.String(), data))
-	}
+	logger.Debugf("UID=%d, Message={%s}, Data=%+v", agent.session.UID(), msg.String(), data)
 
 	args := []reflect.Value{handler.Receiver, agent.srv, reflect.ValueOf(data)}
 	h.chLocalProcess <- unhandledMessage{agent, lastMid, handler.Method, args}
@@ -337,6 +327,6 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 // DumpServices outputs all registered services
 func (h *handlerService) DumpServices() {
 	for name := range h.handlers {
-		logger.Println("registered service", name)
+		logger.Info("registered service", name)
 	}
 }
