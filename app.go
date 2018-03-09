@@ -21,19 +21,69 @@
 package nano
 
 import (
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"syscall"
 
-	"strings"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/google/uuid"
+	"github.com/lonnng/nano/component"
+	"github.com/lonnng/nano/internal/message"
 )
 
-func listen(addr string, isWs bool) {
+// App is the base app struct
+type App struct {
+	serverType string
+	serverID   string
+	debug      bool
+	startAt    time.Time
+	dieChan    chan bool
+	acceptors  []Acceptor
+}
+
+var (
+	app = &App{
+		serverID:   uuid.New().String(),
+		debug:      false,
+		serverType: "game",
+		startAt:    time.Now(),
+		dieChan:    make(chan bool),
+		acceptors:  []Acceptor{},
+	}
+)
+
+func init() {
+	app.startAt = time.Now()
+}
+
+// GetApp gets the app
+func GetApp() *App {
+	return app
+}
+
+// AddAcceptor adds a new acceptor to app
+func AddAcceptor(ac Acceptor) {
+	app.acceptors = append(app.acceptors, ac)
+}
+
+// SetDebug toggles debug on/off
+func SetDebug(debug bool) {
+	app.debug = debug
+}
+
+// SetServerType sets the server type
+func SetServerType(t string) {
+	app.serverType = t
+}
+
+// Start starts the app
+func Start() {
+	listen()
+}
+
+func listen() {
 	hbdEncode()
 	startupComponents()
 
@@ -41,24 +91,33 @@ func listen(addr string, isWs bool) {
 	// by SetTimerPrecision
 	globalTicker = time.NewTicker(timerPrecision)
 
+	logger.Infof("starting server %s:%s", app.serverType, app.serverID)
+
 	// startup logic dispatcher
 	go handler.dispatch()
+	for _, acc := range app.acceptors {
+		a := acc
 
-	go func() {
-		if isWs {
-			listenAndServeWS(addr)
-		} else {
-			listenAndServe(addr)
-		}
-	}()
+		// gets connections from every acceptor and tell handlerservice to handle them
+		go func() {
+			for conn := range a.GetConnChan() {
+				handler.handle(conn)
+			}
+		}()
 
-	logger.Infof("starting application %s, listen at %s", app.name, addr)
+		go func() {
+			a.ListenAndServe()
+		}()
+
+		logger.Infof("listening with acceptor %s on addr %s", reflect.TypeOf(a), a.GetAddr())
+	}
+
 	sg := make(chan os.Signal)
 	signal.Notify(sg, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL)
 
 	// stop server
 	select {
-	case <-env.die:
+	case <-app.dieChan:
 		logger.Warn("The app will shutdown in a few seconds")
 	case s := <-sg:
 		logger.Warn("got signal", s)
@@ -71,43 +130,17 @@ func listen(addr string, isWs bool) {
 	shutdownComponents()
 }
 
-// Enable current server accept connection
-func listenAndServe(addr string) {
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		logger.Fatal(err.Error())
-	}
-
-	defer listener.Close()
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			logger.Error(err.Error())
-			continue
-		}
-
-		go handler.handle(conn)
-	}
+// SetDictionary set routes map, TODO(warning): set dictionary in runtime would be a dangerous operation!!!!!!
+func SetDictionary(dict map[string]uint16) {
+	message.SetDictionary(dict)
 }
 
-func listenAndServeWS(addr string) {
-	var upgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-		CheckOrigin:     env.checkOrigin,
-	}
+// Register register a component with options
+func Register(c component.Component, options ...component.Option) {
+	comps = append(comps, regComp{c, options})
+}
 
-	http.HandleFunc("/"+strings.TrimPrefix(env.wsPath, "/"), func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			logger.Errorf("Upgrade failure, URI=%s, Error=%s", r.RequestURI, err.Error())
-			return
-		}
-
-		handler.handleWS(conn)
-	})
-
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		logger.Fatal(err.Error())
-	}
+// Shutdown send a signal to let 'nano' shutdown itself.
+func Shutdown() {
+	close(app.dieChan)
 }

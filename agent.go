@@ -113,15 +113,13 @@ func (a *agent) Push(route string, v interface{}) error {
 		return ErrBufferExceed
 	}
 
-	if env.debug {
-		switch d := v.(type) {
-		case []byte:
-			logger.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%dbytes",
-				a.session.ID(), a.session.UID(), route, len(d))
-		default:
-			logger.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%+v",
-				a.session.ID(), a.session.UID(), route, v)
-		}
+	switch d := v.(type) {
+	case []byte:
+		logger.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%dbytes",
+			a.session.ID(), a.session.UID(), route, len(d))
+	default:
+		logger.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%+v",
+			a.session.ID(), a.session.UID(), route, v)
 	}
 
 	return a.send(pendingMessage{typ: message.Push, route: route, payload: v})
@@ -148,15 +146,13 @@ func (a *agent) ResponseMID(mid uint, v interface{}) error {
 		return ErrBufferExceed
 	}
 
-	if env.debug {
-		switch d := v.(type) {
-		case []byte:
-			logger.Debugf("Type=Response, ID=%d, UID=%d, MID=%d, Data=%dbytes",
-				a.session.ID(), a.session.UID(), mid, len(d))
-		default:
-			logger.Infof("Type=Response, ID=%d, UID=%d, MID=%d, Data=%+v",
-				a.session.ID(), a.session.UID(), mid, v)
-		}
+	switch d := v.(type) {
+	case []byte:
+		logger.Debugf("Type=Response, ID=%d, UID=%d, MID=%d, Data=%dbytes",
+			a.session.ID(), a.session.UID(), mid, len(d))
+	default:
+		logger.Infof("Type=Response, ID=%d, UID=%d, MID=%d, Data=%+v",
+			a.session.ID(), a.session.UID(), mid, v)
 	}
 
 	return a.send(pendingMessage{typ: message.Response, mid: mid, payload: v})
@@ -275,7 +271,7 @@ func (a *agent) write() {
 		case <-a.chDie: // agent closed signal
 			return
 
-		case <-env.die: // application quit
+		case <-app.dieChan: // application quit
 			return
 		}
 	}

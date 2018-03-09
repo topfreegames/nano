@@ -72,9 +72,6 @@ func NewRoom() *Room {
 
 // AfterInit component lifetime callback
 func (r *Room) AfterInit() {
-	nano.OnSessionClosed(func(s *session.Session) {
-		r.group.Leave(s)
-	})
 	r.timer = nano.NewTimer(time.Minute, func() {
 		println("UserCount: Time=>", time.Now().String(), "Count=>", r.group.Count())
 		println("OutboundBytes", r.stats.outboundBytes)
@@ -86,11 +83,18 @@ func (r *Room) AfterInit() {
 func (r *Room) Join(s *session.Session, msg []byte) error {
 	fakeUID := s.ID() //just use s.ID as uid !!!
 	s.Bind(fakeUID)   // binding session uid
+
 	s.Push("onMembers", &AllMembers{Members: r.group.Members()})
 	// notify others
 	r.group.Broadcast("onNewUser", &NewUser{Content: fmt.Sprintf("New user: %d", s.ID())})
 	// new user join group
 	r.group.Add(s) // add session to group
+
+	// on session close, remove it from group
+	s.OnClose(func() {
+		r.group.Leave(s)
+	})
+
 	return s.Response(&JoinResponse{Result: "success"})
 }
 
@@ -100,7 +104,10 @@ func (r *Room) Message(s *session.Session, msg *UserMessage) error {
 }
 
 func main() {
-	// override default serializer
+	defer (func() {
+		nano.Shutdown()
+	})()
+
 	nano.SetSerializer(json.NewSerializer())
 
 	// rewrite component and handler name
@@ -114,12 +121,15 @@ func main() {
 	nano.Pipeline.Outbound.PushBack(room.stats.outbound)
 	nano.Pipeline.Inbound.PushBack(room.stats.inbound)
 
-	nano.EnableDebug()
 	log.SetFlags(log.LstdFlags | log.Llongfile)
-	nano.SetWSPath("/nano")
+	//TODO fix nano.SetWSPath("/nano")
 
 	http.Handle("/web/", http.StripPrefix("/web/", http.FileServer(http.Dir("web"))))
 
-	nano.SetCheckOriginFunc(func(_ *http.Request) bool { return true })
-	nano.ListenWS(":3250")
+	//TODO need to fix that? nano.SetCheckOriginFunc(func(_ *http.Request) bool { return true })
+	ws := nano.NewWSAcceptor(":3250", "/nano")
+	tcp := nano.NewTCPAcceptor(":3255")
+	nano.AddAcceptor(ws)
+	nano.AddAcceptor(tcp)
+	nano.Start()
 }

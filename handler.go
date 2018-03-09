@@ -132,15 +132,12 @@ func onSessionClosed(s *session.Session) {
 		}
 	}()
 
-	env.muCallbacks.RLock()
-	defer env.muCallbacks.RUnlock()
-
-	if len(env.callbacks) < 1 {
+	if len(s.OnCloseCallbacks) < 1 {
 		return
 	}
 
-	for _, fn := range env.callbacks {
-		fn(s)
+	for _, fn := range s.OnCloseCallbacks {
+		fn()
 	}
 }
 
@@ -175,7 +172,7 @@ func (h *handlerService) dispatch() {
 		case id := <-timerManager.chClosingTimer: // closing timers
 			delete(timerManager.timers, id)
 
-		case <-env.die: // application quit signal
+		case <-app.dieChan: // application quit signal
 			return
 		}
 	}
@@ -327,6 +324,6 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 // DumpServices outputs all registered services
 func (h *handlerService) DumpServices() {
 	for name := range h.handlers {
-		logger.Info("registered service", name)
+		logger.Infof("registered service %s", name)
 	}
 }

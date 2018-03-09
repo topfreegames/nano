@@ -1,4 +1,4 @@
-// Copyright (c) nano Author. All Rights Reserved.
+// Copyright (c) nano Author and TFG Co. All Rights Reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,36 +20,47 @@
 
 package nano
 
-import (
-	"net/http"
-	"os"
-	"path/filepath"
-	"time"
-)
+import "net"
 
-// VERSION returns current nano version
-var VERSION = "0.1.0"
+// TCPAcceptor struct
+type TCPAcceptor struct {
+	addr     string
+	connChan chan net.Conn
+}
 
-var (
-	// env represents the environment of the current process, includes
-	// work path and config path etc.
-	env = &struct {
-		wd          string                   // working path
-		heartbeat   time.Duration            // heartbeat internal
-		checkOrigin func(*http.Request) bool // check origin when websocket enabled
-	}{}
-)
+// NewTCPAcceptor creates a new instance of tcp acceptor
+func NewTCPAcceptor(addr string) *TCPAcceptor {
+	return &TCPAcceptor{
+		addr:     addr,
+		connChan: make(chan net.Conn),
+	}
+}
 
-// init default configs
-func init() {
+// GetAddr returns the addr the acceptor will listen on
+func (a *TCPAcceptor) GetAddr() string {
+	return a.addr
+}
 
-	// environment initialize
-	if wd, err := os.Getwd(); err != nil {
-		panic(err)
-	} else {
-		env.wd, _ = filepath.Abs(wd)
+// GetConnChan gets a connection channel
+func (a *TCPAcceptor) GetConnChan() chan net.Conn {
+	return a.connChan
+}
+
+// ListenAndServe using tcp acceptor
+func (a *TCPAcceptor) ListenAndServe() {
+	listener, err := net.Listen("tcp", a.addr)
+	if err != nil {
+		logger.Fatal(err.Error())
 	}
 
-	env.heartbeat = 30 * time.Second
-	env.checkOrigin = func(_ *http.Request) bool { return true }
+	defer listener.Close()
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			logger.Error(err.Error())
+			continue
+		}
+
+		a.connChan <- conn
+	}
 }

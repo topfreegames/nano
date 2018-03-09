@@ -1,4 +1,4 @@
-// Copyright (c) nano Author. All Rights Reserved.
+// Copyright (c) nano Author and TFG Co. All Rights Reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,10 +23,71 @@ package nano
 import (
 	"io"
 	"net"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
+
+// WSAcceptor struct
+type WSAcceptor struct {
+	addr     string
+	wsPath   string
+	connChan chan net.Conn
+}
+
+// NewWSAcceptor returns a new instance of WSAcceptor
+func NewWSAcceptor(addr string, wsPath ...string) *WSAcceptor {
+	w := &WSAcceptor{
+		addr:     addr,
+		connChan: make(chan net.Conn),
+		wsPath:   "",
+	}
+	if len(wsPath) > 0 {
+		w.wsPath = wsPath[0]
+	}
+	return w
+}
+
+// GetAddr returns the addr the acceptor will listen on
+func (w *WSAcceptor) GetAddr() string {
+	return w.addr
+}
+
+// GetConnChan gets a connection channel
+func (w *WSAcceptor) GetConnChan() chan net.Conn {
+	return w.connChan
+}
+
+// ListenAndServe listens and serve in the specified addr
+func (w *WSAcceptor) ListenAndServe() {
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     env.checkOrigin,
+	}
+
+	http.HandleFunc("/"+strings.TrimPrefix(w.wsPath, "/"), func(rw http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(rw, r, nil)
+		if err != nil {
+			logger.Errorf("Upgrade failure, URI=%s, Error=%s", r.RequestURI, err.Error())
+			return
+		}
+
+		c, err := newWSConn(conn)
+		if err != nil {
+			logger.Error(err)
+			return
+		}
+
+		w.connChan <- c
+	})
+
+	if err := http.ListenAndServe(w.addr, nil); err != nil {
+		logger.Fatal(err.Error())
+	}
+}
 
 // wsConn is an adapter to t.Conn, which implements all t.Conn
 // interface base on *websocket.Conn
@@ -134,13 +195,4 @@ func (c *wsConn) SetReadDeadline(t time.Time) error {
 // A zero value for t means Write will not time out.
 func (c *wsConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
-}
-
-func (h *handlerService) handleWS(conn *websocket.Conn) {
-	c, err := newWSConn(conn)
-	if err != nil {
-		logger.Error(err)
-		return
-	}
-	h.handle(c)
 }

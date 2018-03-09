@@ -50,22 +50,24 @@ var (
 // Session instance related to the client will be passed to Handler method as the first
 // parameter.
 type Session struct {
-	sync.RWMutex                        // protect data
-	id           int64                  // session global unique id
-	uid          int64                  // binding user id
-	lastTime     int64                  // last heartbeat time
-	entity       NetworkEntity          // low-level network entity
-	data         map[string]interface{} // session data store
+	sync.RWMutex                            // protect data
+	id               int64                  // session global unique id
+	uid              int64                  // binding user id
+	lastTime         int64                  // last heartbeat time
+	entity           NetworkEntity          // low-level network entity
+	data             map[string]interface{} // session data store
+	OnCloseCallbacks []func()               //onClose callbacks
 }
 
 // New returns a new session instance
 // a NetworkEntity is a low-level network instance
 func New(entity NetworkEntity) *Session {
 	return &Session{
-		id:       service.Connections.SessionID(),
-		entity:   entity,
-		data:     make(map[string]interface{}),
-		lastTime: time.Now().Unix(),
+		id:               service.Connections.SessionID(),
+		entity:           entity,
+		data:             make(map[string]interface{}),
+		lastTime:         time.Now().Unix(),
+		OnCloseCallbacks: []func(){},
 	}
 }
 
@@ -108,6 +110,12 @@ func (s *Session) Bind(uid int64) error {
 
 	atomic.StoreInt64(&s.uid, uid)
 	return nil
+}
+
+// OnClose adds the function it receives to the callbacks that will be called
+// when the session is closed
+func (s *Session) OnClose(c func()) {
+	s.OnCloseCallbacks = append(s.OnCloseCallbacks, c)
 }
 
 // Close terminate current session, session related data will not be released,
