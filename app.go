@@ -41,6 +41,7 @@ type App struct {
 	startAt    time.Time
 	dieChan    chan bool
 	acceptors  []Acceptor
+	heartbeat  time.Duration
 }
 
 var (
@@ -51,12 +52,9 @@ var (
 		startAt:    time.Now(),
 		dieChan:    make(chan bool),
 		acceptors:  []Acceptor{},
+		heartbeat:  30 * time.Second,
 	}
 )
-
-func init() {
-	app.startAt = time.Now()
-}
 
 // GetApp gets the app
 func GetApp() *App {
@@ -71,6 +69,11 @@ func AddAcceptor(ac Acceptor) {
 // SetDebug toggles debug on/off
 func SetDebug(debug bool) {
 	app.debug = debug
+}
+
+// SetHeartbeatTime sets the heartbeat time
+func SetHeartbeatTime(interval time.Duration) {
+	app.heartbeat = interval
 }
 
 // SetServerType sets the server type

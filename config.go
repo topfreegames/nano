@@ -20,36 +20,5 @@
 
 package nano
 
-import (
-	"net/http"
-	"os"
-	"path/filepath"
-	"time"
-)
-
 // VERSION returns current nano version
 var VERSION = "0.1.0"
-
-var (
-	// env represents the environment of the current process, includes
-	// work path and config path etc.
-	env = &struct {
-		wd          string                   // working path
-		heartbeat   time.Duration            // heartbeat internal
-		checkOrigin func(*http.Request) bool // check origin when websocket enabled
-	}{}
-)
-
-// init default configs
-func init() {
-
-	// environment initialize
-	if wd, err := os.Getwd(); err != nil {
-		panic(err)
-	} else {
-		env.wd, _ = filepath.Abs(wd)
-	}
-
-	env.heartbeat = 30 * time.Second
-	env.checkOrigin = func(_ *http.Request) bool { return true }
-}

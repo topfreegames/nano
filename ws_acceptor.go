@@ -65,7 +65,6 @@ func (w *WSAcceptor) ListenAndServe() {
 	var upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		CheckOrigin:     env.checkOrigin,
 	}
 
 	http.HandleFunc("/"+strings.TrimPrefix(w.wsPath, "/"), func(rw http.ResponseWriter, r *http.Request) {

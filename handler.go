@@ -50,7 +50,7 @@ var (
 func hbdEncode() {
 	data, err := json.Marshal(map[string]interface{}{
 		"code": 200,
-		"sys":  map[string]float64{"heartbeat": env.heartbeat.Seconds()},
+		"sys":  map[string]float64{"heartbeat": app.heartbeat.Seconds()},
 	})
 	if err != nil {
 		panic(err)

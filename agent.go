@@ -202,7 +202,7 @@ func (a *agent) setStatus(state int32) {
 }
 
 func (a *agent) write() {
-	ticker := time.NewTicker(env.heartbeat)
+	ticker := time.NewTicker(app.heartbeat)
 	chWrite := make(chan []byte, agentWriteBacklog)
 	// clean func
 	defer func() {
@@ -216,7 +216,7 @@ func (a *agent) write() {
 	for {
 		select {
 		case <-ticker.C:
-			deadline := time.Now().Add(-2 * env.heartbeat).Unix()
+			deadline := time.Now().Add(-2 * app.heartbeat).Unix()
 			if a.lastAt < deadline {
 				logger.Debugf("Session heartbeat timeout, LastTime=%d, Deadline=%d", a.lastAt, deadline)
 				return
