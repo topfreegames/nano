@@ -32,6 +32,8 @@ import (
 	"github.com/lonnng/nano/component"
 	"github.com/lonnng/nano/internal/codec"
 	"github.com/lonnng/nano/internal/message"
+	"github.com/lonnng/nano/serialize"
+	"github.com/lonnng/nano/serialize/protobuf"
 )
 
 // App is the base app struct
@@ -45,6 +47,7 @@ type App struct {
 	heartbeat     time.Duration
 	packetDecoder codec.PacketDecoder
 	packetEncoder codec.PacketEncoder
+	serializer    serialize.Serializer
 }
 
 var (
@@ -58,6 +61,7 @@ var (
 		heartbeat:     30 * time.Second,
 		packetDecoder: codec.NewPomeloPacketDecoder(),
 		packetEncoder: codec.NewPomeloPacketEncoder(),
+		serializer:    protobuf.NewSerializer(),
 	}
 )
 
@@ -89,6 +93,12 @@ func SetPacketEncoder(e codec.PacketEncoder) {
 // SetHeartbeatTime sets the heartbeat time
 func SetHeartbeatTime(interval time.Duration) {
 	app.heartbeat = interval
+}
+
+// SetSerializer customize application serializer, which automatically Marshal
+// and UnMarshal handler payload
+func SetSerializer(seri serialize.Serializer) {
+	app.serializer = seri
 }
 
 // SetServerType sets the server type
