@@ -26,15 +26,16 @@ func NewWorld() *World {
 
 // Init initialize world component
 func (w *World) Init() {
-	nano.OnSessionClosed(func(s *session.Session) {
-		w.Leave(s)
-		w.Broadcast("leave", &protocol.LeaveWorldResponse{ID: s.ID()})
-		log.Println(fmt.Sprintf("session count: %d", w.Count()))
-	})
+
 }
 
 // Enter was called when new guest enter
 func (w *World) Enter(s *session.Session, msg []byte) error {
+	s.OnClose(func() {
+		w.Leave(s)
+		w.Broadcast("leave", &protocol.LeaveWorldResponse{ID: s.ID()})
+		log.Println(fmt.Sprintf("session count: %d", w.Count()))
+	})
 	w.Add(s)
 	log.Println(fmt.Sprintf("session count: %d", w.Count()))
 	return s.Response(&protocol.EnterWorldResponse{ID: s.ID()})
