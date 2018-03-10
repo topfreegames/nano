@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/lonnng/nano"
+	"github.com/lonnng/nano/acceptor"
 	"github.com/lonnng/nano/examples/demo/tadpole/logic"
 	"github.com/lonnng/nano/serialize/json"
 	"github.com/urfave/cli"
@@ -46,7 +47,7 @@ func serve(ctx *cli.Context) error {
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	addr := ctx.String("addr")
-	nano.AddAcceptor(nano.NewWSAcceptor(addr))
+	nano.AddAcceptor(acceptor.NewWSAcceptor(addr))
 	nano.Start()
 
 	return nil

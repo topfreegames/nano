@@ -1,4 +1,4 @@
-package nano
+package logger
 
 import "github.com/sirupsen/logrus"
 
@@ -25,16 +25,16 @@ type Logger interface {
 	Warnln(args ...interface{})
 }
 
-// Default logger
-var logger Logger = logrus.New()
+// Log is the default logger
+var Log Logger = logrus.New()
 
 func init() {
-	logger.(*logrus.Logger).SetLevel(logrus.DebugLevel)
+	Log.(*logrus.Logger).SetLevel(logrus.DebugLevel)
 }
 
 // SetLogger rewrites the default logger
 func SetLogger(l Logger) {
 	if l != nil {
-		logger = l
+		Log = l
 	}
 }

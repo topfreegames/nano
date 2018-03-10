@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lonnng/nano"
+	"github.com/lonnng/nano/acceptor"
 	"github.com/lonnng/nano/component"
 	"github.com/lonnng/nano/serialize/json"
 	"github.com/lonnng/nano/session"
@@ -127,8 +128,8 @@ func main() {
 	http.Handle("/web/", http.StripPrefix("/web/", http.FileServer(http.Dir("web"))))
 
 	//TODO need to fix that? nano.SetCheckOriginFunc(func(_ *http.Request) bool { return true })
-	ws := nano.NewWSAcceptor(":3250", "/nano")
-	tcp := nano.NewTCPAcceptor(":3255")
+	ws := acceptor.NewWSAcceptor(":3250", "/nano")
+	tcp := acceptor.NewTCPAcceptor(":3255")
 	nano.AddAcceptor(ws)
 	nano.AddAcceptor(tcp)
 	nano.Start()

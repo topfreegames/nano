@@ -30,6 +30,7 @@ import (
 	"github.com/lonnng/nano/component"
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/internal/packet"
+	"github.com/lonnng/nano/logger"
 	"github.com/lonnng/nano/session"
 )
 
@@ -99,14 +100,14 @@ func newHandlerService() *handlerService {
 func pcall(method reflect.Method, args []reflect.Value) {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Errorf("nano/dispatch: %v", err)
-			logger.Error(stack())
+			logger.Log.Errorf("nano/dispatch: %v", err)
+			logger.Log.Error(stack())
 		}
 	}()
 
 	if r := method.Func.Call(args); len(r) > 0 {
 		if err := r[0].Interface(); err != nil {
-			logger.Error(err.(error).Error())
+			logger.Log.Error(err.(error).Error())
 		}
 	}
 }
@@ -115,8 +116,8 @@ func pcall(method reflect.Method, args []reflect.Value) {
 func pinvoke(fn func()) {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Errorf("nano/invoke: %v", err)
-			logger.Error(stack())
+			logger.Log.Errorf("nano/invoke: %v", err)
+			logger.Log.Error(stack())
 		}
 	}()
 
@@ -126,8 +127,8 @@ func pinvoke(fn func()) {
 func onSessionClosed(s *session.Session) {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Errorf("nano/onSessionClosed: %v", err)
-			logger.Error(stack())
+			logger.Log.Errorf("nano/onSessionClosed: %v", err)
+			logger.Log.Error(stack())
 		}
 	}()
 
@@ -203,12 +204,12 @@ func (h *handlerService) handle(conn net.Conn) {
 	// startup write goroutine
 	go agent.write()
 
-	logger.Debugf("New session established: %s", agent.String())
+	logger.Log.Debugf("New session established: %s", agent.String())
 
 	// guarantee agent related resource be destroyed
 	defer func() {
 		agent.Close()
-		logger.Debugf("Session read goroutine exit, SessionID=%d, UID=%d", agent.session.ID(), agent.session.UID())
+		logger.Log.Debugf("Session read goroutine exit, SessionID=%d, UID=%d", agent.session.ID(), agent.session.UID())
 	}()
 
 	// read loop
@@ -216,14 +217,14 @@ func (h *handlerService) handle(conn net.Conn) {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			logger.Debugf("Read message error: %s, session will be closed immediately", err.Error())
+			logger.Log.Debugf("Read message error: %s, session will be closed immediately", err.Error())
 			return
 		}
 
 		// TODO(warning): decoder use slice for performance, packet data should be copy before next Decode
 		packets, err := agent.decoder.Decode(buf[:n])
 		if err != nil {
-			logger.Error(err.Error())
+			logger.Log.Error(err.Error())
 			return
 		}
 
@@ -234,7 +235,7 @@ func (h *handlerService) handle(conn net.Conn) {
 		// process all packet
 		for i := range packets {
 			if err := h.processPacket(agent, packets[i]); err != nil {
-				logger.Error(err.Error())
+				logger.Log.Error(err.Error())
 				return
 			}
 		}
@@ -249,11 +250,11 @@ func (h *handlerService) processPacket(agent *agent, p *packet.Packet) error {
 		}
 
 		agent.setStatus(statusHandshake)
-		logger.Debugf("Session handshake Id=%d, Remote=%s", agent.session.ID(), agent.conn.RemoteAddr())
+		logger.Log.Debugf("Session handshake Id=%d, Remote=%s", agent.session.ID(), agent.conn.RemoteAddr())
 
 	case packet.HandshakeAck:
 		agent.setStatus(statusWorking)
-		logger.Debugf("Receive handshake ACK Id=%d, Remote=%s", agent.session.ID(), agent.conn.RemoteAddr())
+		logger.Log.Debugf("Receive handshake ACK Id=%d, Remote=%s", agent.session.ID(), agent.conn.RemoteAddr())
 
 	case packet.Data:
 		if agent.status() < statusWorking {
@@ -286,7 +287,7 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 
 	handler, ok := h.handlers[msg.Route]
 	if !ok {
-		logger.Warnf("nano/handler: %s not found(forgot registered?)", msg.Route)
+		logger.Log.Warnf("nano/handler: %s not found(forgot registered?)", msg.Route)
 		return
 	}
 
@@ -296,7 +297,7 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 		for _, h := range Pipeline.Inbound.handlers {
 			payload, err = h(agent.session, payload)
 			if err != nil {
-				logger.Errorf("nano/handler: broken pipeline: %s", err.Error())
+				logger.Log.Errorf("nano/handler: broken pipeline: %s", err.Error())
 				return
 			}
 		}
@@ -309,12 +310,12 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 		data = reflect.New(handler.Type.Elem()).Interface()
 		err := app.serializer.Unmarshal(payload, data)
 		if err != nil {
-			logger.Error("deserialize error", err.Error())
+			logger.Log.Error("deserialize error", err.Error())
 			return
 		}
 	}
 
-	logger.Debugf("UID=%d, Message={%s}, Data=%+v", agent.session.UID(), msg.String(), data)
+	logger.Log.Debugf("UID=%d, Message={%s}, Data=%+v", agent.session.UID(), msg.String(), data)
 
 	args := []reflect.Value{handler.Receiver, agent.srv, reflect.ValueOf(data)}
 	h.chLocalProcess <- unhandledMessage{agent, lastMid, handler.Method, args}
@@ -323,6 +324,6 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 // DumpServices outputs all registered services
 func (h *handlerService) DumpServices() {
 	for name := range h.handlers {
-		logger.Infof("registered service %s", name)
+		logger.Log.Infof("registered service %s", name)
 	}
 }

@@ -29,9 +29,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lonnng/nano/acceptor"
 	"github.com/lonnng/nano/component"
 	"github.com/lonnng/nano/internal/codec"
 	"github.com/lonnng/nano/internal/message"
+	"github.com/lonnng/nano/logger"
 	"github.com/lonnng/nano/serialize"
 	"github.com/lonnng/nano/serialize/protobuf"
 )
@@ -43,7 +45,7 @@ type App struct {
 	debug         bool
 	startAt       time.Time
 	dieChan       chan bool
-	acceptors     []Acceptor
+	acceptors     []acceptor.Acceptor
 	heartbeat     time.Duration
 	packetDecoder codec.PacketDecoder
 	packetEncoder codec.PacketEncoder
@@ -57,7 +59,7 @@ var (
 		serverType:    "game",
 		startAt:       time.Now(),
 		dieChan:       make(chan bool),
-		acceptors:     []Acceptor{},
+		acceptors:     []acceptor.Acceptor{},
 		heartbeat:     30 * time.Second,
 		packetDecoder: codec.NewPomeloPacketDecoder(),
 		packetEncoder: codec.NewPomeloPacketEncoder(),
@@ -71,7 +73,7 @@ func GetApp() *App {
 }
 
 // AddAcceptor adds a new acceptor to app
-func AddAcceptor(ac Acceptor) {
+func AddAcceptor(ac acceptor.Acceptor) {
 	app.acceptors = append(app.acceptors, ac)
 }
 
@@ -119,7 +121,7 @@ func listen() {
 	// by SetTimerPrecision
 	globalTicker = time.NewTicker(timerPrecision)
 
-	logger.Infof("starting server %s:%s", app.serverType, app.serverID)
+	logger.Log.Infof("starting server %s:%s", app.serverType, app.serverID)
 
 	// startup logic dispatcher
 	go handler.dispatch()
@@ -137,7 +139,7 @@ func listen() {
 			a.ListenAndServe()
 		}()
 
-		logger.Infof("listening with acceptor %s on addr %s", reflect.TypeOf(a), a.GetAddr())
+		logger.Log.Infof("listening with acceptor %s on addr %s", reflect.TypeOf(a), a.GetAddr())
 	}
 
 	sg := make(chan os.Signal)
@@ -146,12 +148,12 @@ func listen() {
 	// stop server
 	select {
 	case <-app.dieChan:
-		logger.Warn("The app will shutdown in a few seconds")
+		logger.Log.Warn("The app will shutdown in a few seconds")
 	case s := <-sg:
-		logger.Warn("got signal", s)
+		logger.Log.Warn("got signal", s)
 	}
 
-	logger.Warn("server is stopping...")
+	logger.Log.Warn("server is stopping...")
 
 	// shutdown all components registered by application, that
 	// call by reverse order against register

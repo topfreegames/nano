@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package nano
+package acceptor
 
 import (
 	"io"
@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/lonnng/nano/logger"
 )
 
 // WSAcceptor struct
@@ -70,13 +71,13 @@ func (w *WSAcceptor) ListenAndServe() {
 	http.HandleFunc("/"+strings.TrimPrefix(w.wsPath, "/"), func(rw http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(rw, r, nil)
 		if err != nil {
-			logger.Errorf("Upgrade failure, URI=%s, Error=%s", r.RequestURI, err.Error())
+			logger.Log.Errorf("Upgrade failure, URI=%s, Error=%s", r.RequestURI, err.Error())
 			return
 		}
 
 		c, err := newWSConn(conn)
 		if err != nil {
-			logger.Error(err)
+			logger.Log.Error(err)
 			return
 		}
 
@@ -84,7 +85,7 @@ func (w *WSAcceptor) ListenAndServe() {
 	})
 
 	if err := http.ListenAndServe(w.addr, nil); err != nil {
-		logger.Fatal(err.Error())
+		logger.Log.Fatal(err.Error())
 	}
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) TFG Co. All Rights Reserved.
+// Copyright (c) nano Author and TFG Co. All Rights Reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,13 +18,53 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package nano
+package acceptor
 
-import "net"
+import (
+	"net"
 
-// Acceptor type interface
-type Acceptor interface {
-	ListenAndServe()
-	GetAddr() string
-	GetConnChan() chan net.Conn
+	"github.com/lonnng/nano/logger"
+)
+
+// TCPAcceptor struct
+type TCPAcceptor struct {
+	addr     string
+	connChan chan net.Conn
+}
+
+// NewTCPAcceptor creates a new instance of tcp acceptor
+func NewTCPAcceptor(addr string) *TCPAcceptor {
+	return &TCPAcceptor{
+		addr:     addr,
+		connChan: make(chan net.Conn),
+	}
+}
+
+// GetAddr returns the addr the acceptor will listen on
+func (a *TCPAcceptor) GetAddr() string {
+	return a.addr
+}
+
+// GetConnChan gets a connection channel
+func (a *TCPAcceptor) GetConnChan() chan net.Conn {
+	return a.connChan
+}
+
+// ListenAndServe using tcp acceptor
+func (a *TCPAcceptor) ListenAndServe() {
+	listener, err := net.Listen("tcp", a.addr)
+	if err != nil {
+		logger.Log.Fatal(err.Error())
+	}
+
+	defer listener.Close()
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			logger.Log.Error(err.Error())
+			continue
+		}
+
+		a.connChan <- conn
+	}
 }

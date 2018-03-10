@@ -31,6 +31,7 @@ import (
 	"github.com/lonnng/nano/internal/codec"
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/internal/packet"
+	"github.com/lonnng/nano/logger"
 	"github.com/lonnng/nano/session"
 )
 
@@ -115,10 +116,10 @@ func (a *agent) Push(route string, v interface{}) error {
 
 	switch d := v.(type) {
 	case []byte:
-		logger.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%dbytes",
+		logger.Log.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%dbytes",
 			a.session.ID(), a.session.UID(), route, len(d))
 	default:
-		logger.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%+v",
+		logger.Log.Debugf("Type=Push, ID=%d, UID=%d, Route=%s, Data=%+v",
 			a.session.ID(), a.session.UID(), route, v)
 	}
 
@@ -148,10 +149,10 @@ func (a *agent) ResponseMID(mid uint, v interface{}) error {
 
 	switch d := v.(type) {
 	case []byte:
-		logger.Debugf("Type=Response, ID=%d, UID=%d, MID=%d, Data=%dbytes",
+		logger.Log.Debugf("Type=Response, ID=%d, UID=%d, MID=%d, Data=%dbytes",
 			a.session.ID(), a.session.UID(), mid, len(d))
 	default:
-		logger.Infof("Type=Response, ID=%d, UID=%d, MID=%d, Data=%+v",
+		logger.Log.Infof("Type=Response, ID=%d, UID=%d, MID=%d, Data=%+v",
 			a.session.ID(), a.session.UID(), mid, v)
 	}
 
@@ -167,7 +168,7 @@ func (a *agent) Close() error {
 	}
 	a.setStatus(statusClosed)
 
-	logger.Debugf("Session closed, ID=%d, UID=%d, IP=%s",
+	logger.Log.Debugf("Session closed, ID=%d, UID=%d, IP=%s",
 		a.session.ID(), a.session.UID(), a.conn.RemoteAddr())
 
 	// prevent closing closed channel
@@ -210,7 +211,7 @@ func (a *agent) write() {
 		close(a.chSend)
 		close(chWrite)
 		a.Close()
-		logger.Debugf("Session write goroutine exit, SessionID=%d, UID=%d", a.session.ID(), a.session.UID())
+		logger.Log.Debugf("Session write goroutine exit, SessionID=%d, UID=%d", a.session.ID(), a.session.UID())
 	}()
 
 	for {
@@ -218,7 +219,7 @@ func (a *agent) write() {
 		case <-ticker.C:
 			deadline := time.Now().Add(-2 * app.heartbeat).Unix()
 			if a.lastAt < deadline {
-				logger.Debugf("Session heartbeat timeout, LastTime=%d, Deadline=%d", a.lastAt, deadline)
+				logger.Log.Debugf("Session heartbeat timeout, LastTime=%d, Deadline=%d", a.lastAt, deadline)
 				return
 			}
 			chWrite <- hbd
@@ -226,14 +227,14 @@ func (a *agent) write() {
 		case data := <-chWrite:
 			// close agent while low-level conn broken
 			if _, err := a.conn.Write(data); err != nil {
-				logger.Error(err.Error())
+				logger.Log.Error(err.Error())
 				return
 			}
 
 		case data := <-a.chSend:
 			payload, err := serializeOrRaw(data.payload)
 			if err != nil {
-				logger.Error(err.Error())
+				logger.Log.Error(err.Error())
 				break
 			}
 
@@ -241,7 +242,7 @@ func (a *agent) write() {
 				for _, h := range Pipeline.Outbound.handlers {
 					payload, err = h(a.session, payload)
 					if err != nil {
-						logger.Debugf("broken pipeline, error: %s", err.Error())
+						logger.Log.Debugf("broken pipeline, error: %s", err.Error())
 						break
 					}
 				}
@@ -256,14 +257,14 @@ func (a *agent) write() {
 			}
 			em, err := m.Encode()
 			if err != nil {
-				logger.Error(err.Error())
+				logger.Log.Error(err.Error())
 				break
 			}
 
 			// packet encode
 			p, err := app.packetEncoder.Encode(packet.Data, em)
 			if err != nil {
-				logger.Error(err)
+				logger.Log.Error(err)
 				break
 			}
 			chWrite <- p
