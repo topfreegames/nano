@@ -241,8 +241,8 @@ func (h *handlerService) handle(conn net.Conn) {
 	}
 }
 
-func (h *handlerService) processPacket(agent *agent, p packet.Packet) error {
-	switch p.GetType() {
+func (h *handlerService) processPacket(agent *agent, p *packet.Packet) error {
+	switch p.Type {
 	case packet.Handshake:
 		if _, err := agent.conn.Write(hrd); err != nil {
 			return err
@@ -261,7 +261,7 @@ func (h *handlerService) processPacket(agent *agent, p packet.Packet) error {
 				agent.conn.RemoteAddr().String())
 		}
 
-		msg, err := message.Decode(p.GetData())
+		msg, err := message.Decode(p.Data)
 		if err != nil {
 			return err
 		}

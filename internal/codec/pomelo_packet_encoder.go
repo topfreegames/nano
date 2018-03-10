@@ -44,7 +44,7 @@ func (e *PomeloPacketEncoder) Encode(typ packet.Type, data []byte) ([]byte, erro
 		return nil, packet.ErrWrongPomeloPacketType
 	}
 
-	p := &packet.PomeloPacket{Type: typ, Length: len(data)}
+	p := &packet.Packet{Type: typ, Length: len(data)}
 	buf := make([]byte, p.Length+HeadLength)
 	buf[0] = byte(p.Type)
 

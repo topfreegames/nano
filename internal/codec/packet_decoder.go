@@ -24,5 +24,5 @@ import "github.com/lonnng/nano/internal/packet"
 
 // PacketDecoder interface
 type PacketDecoder interface {
-	Decode(data []byte) ([]packet.Packet, error)
+	Decode(data []byte) ([]*packet.Packet, error)
 }

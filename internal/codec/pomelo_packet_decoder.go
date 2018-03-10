@@ -58,11 +58,11 @@ func (c *PomeloPacketDecoder) forward() error {
 
 // Decode decode the network bytes slice to packet.Packet(s)
 // TODO(Warning): shared slice
-func (c *PomeloPacketDecoder) Decode(data []byte) ([]packet.Packet, error) {
+func (c *PomeloPacketDecoder) Decode(data []byte) ([]*packet.Packet, error) {
 	c.buf.Write(data)
 
 	var (
-		packets []packet.Packet
+		packets []*packet.Packet
 		err     error
 	)
 	// check length
@@ -78,7 +78,7 @@ func (c *PomeloPacketDecoder) Decode(data []byte) ([]packet.Packet, error) {
 	}
 
 	for c.size <= c.buf.Len() {
-		p := &packet.PomeloPacket{Type: packet.Type(c.typ), Length: c.size, Data: c.buf.Next(c.size)}
+		p := &packet.Packet{Type: packet.Type(c.typ), Length: c.size, Data: c.buf.Next(c.size)}
 		packets = append(packets, p)
 
 		// more packet

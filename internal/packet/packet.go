@@ -1,4 +1,4 @@
-// Copyright (c) TFG Co. All Rights Reserved.
+// Copyright (c) nano Author. All Rights Reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,10 +20,23 @@
 
 package packet
 
-// Packet interface
-type Packet interface {
-	GetType() Type
-	GetLength() int
-	GetData() []byte
-	String() string
+import (
+	"fmt"
+)
+
+// Packet represents a network packet.
+type Packet struct {
+	Type   Type
+	Length int
+	Data   []byte
+}
+
+//New create a Packet instance.
+func New() *Packet {
+	return &Packet{}
+}
+
+//String represents the Packet's in text mode.
+func (p *Packet) String() string {
+	return fmt.Sprintf("Type: %d, Length: %d, Data: %s", p.Type, p.Length, string(p.Data))
 }
