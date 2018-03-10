@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/lonnng/nano/component"
-	"github.com/lonnng/nano/internal/codec"
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/internal/packet"
 	"github.com/lonnng/nano/session"
@@ -56,12 +55,12 @@ func hbdEncode() {
 		panic(err)
 	}
 
-	hrd, err = codec.Encode(packet.Handshake, data)
+	hrd, err = app.packetEncoder.Encode(packet.Handshake, data)
 	if err != nil {
 		panic(err)
 	}
 
-	hbd, err = codec.Encode(packet.Heartbeat, nil)
+	hbd, err = app.packetEncoder.Encode(packet.Heartbeat, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -242,8 +241,8 @@ func (h *handlerService) handle(conn net.Conn) {
 	}
 }
 
-func (h *handlerService) processPacket(agent *agent, p *packet.Packet) error {
-	switch p.Type {
+func (h *handlerService) processPacket(agent *agent, p packet.Packet) error {
+	switch p.GetType() {
 	case packet.Handshake:
 		if _, err := agent.conn.Write(hrd); err != nil {
 			return err
@@ -262,7 +261,7 @@ func (h *handlerService) processPacket(agent *agent, p *packet.Packet) error {
 				agent.conn.RemoteAddr().String())
 		}
 
-		msg, err := message.Decode(p.Data)
+		msg, err := message.Decode(p.GetData())
 		if err != nil {
 			return err
 		}

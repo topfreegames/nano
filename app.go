@@ -30,29 +30,34 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lonnng/nano/component"
+	"github.com/lonnng/nano/internal/codec"
 	"github.com/lonnng/nano/internal/message"
 )
 
 // App is the base app struct
 type App struct {
-	serverType string
-	serverID   string
-	debug      bool
-	startAt    time.Time
-	dieChan    chan bool
-	acceptors  []Acceptor
-	heartbeat  time.Duration
+	serverType    string
+	serverID      string
+	debug         bool
+	startAt       time.Time
+	dieChan       chan bool
+	acceptors     []Acceptor
+	heartbeat     time.Duration
+	packetDecoder codec.PacketDecoder
+	packetEncoder codec.PacketEncoder
 }
 
 var (
 	app = &App{
-		serverID:   uuid.New().String(),
-		debug:      false,
-		serverType: "game",
-		startAt:    time.Now(),
-		dieChan:    make(chan bool),
-		acceptors:  []Acceptor{},
-		heartbeat:  30 * time.Second,
+		serverID:      uuid.New().String(),
+		debug:         false,
+		serverType:    "game",
+		startAt:       time.Now(),
+		dieChan:       make(chan bool),
+		acceptors:     []Acceptor{},
+		heartbeat:     30 * time.Second,
+		packetDecoder: codec.NewPomeloPacketDecoder(),
+		packetEncoder: codec.NewPomeloPacketEncoder(),
 	}
 )
 
@@ -69,6 +74,16 @@ func AddAcceptor(ac Acceptor) {
 // SetDebug toggles debug on/off
 func SetDebug(debug bool) {
 	app.debug = debug
+}
+
+// SetPacketDecoder changes the decoder used to parse messages received
+func SetPacketDecoder(d codec.PacketDecoder) {
+	app.packetDecoder = d
+}
+
+// SetPacketEncoder changes the encoder used to package outgoing messages
+func SetPacketEncoder(e codec.PacketEncoder) {
+	app.packetEncoder = e
 }
 
 // SetHeartbeatTime sets the heartbeat time

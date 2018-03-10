@@ -1,4 +1,4 @@
-// Copyright (c) TFG Co. All Rights Reserved.
+// Copyright (c) nano Author and TFG Co. All Rights Reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,12 +18,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package packet
+package codec
 
-// Packet interface
-type Packet interface {
-	GetType() Type
-	GetLength() int
-	GetData() []byte
-	String() string
-}
+import "errors"
+
+// Codec constants.
+const (
+	HeadLength    = 4
+	MaxPacketSize = 64 * 1024
+)
+
+// ErrPacketSizeExcced is the error used for encode/decode.
+var ErrPacketSizeExcced = errors.New("codec: packet size exceed")

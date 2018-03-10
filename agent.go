@@ -57,7 +57,7 @@ type (
 		chDie   chan struct{}       // wait for close
 		chSend  chan pendingMessage // push message queue
 		lastAt  int64               // last heartbeat unix time stamp
-		decoder *codec.Decoder      // binary decoder
+		decoder codec.PacketDecoder // binary decoder
 
 		srv reflect.Value // cached session reflect.Value
 	}
@@ -78,7 +78,7 @@ func newAgent(conn net.Conn) *agent {
 		chDie:   make(chan struct{}),
 		lastAt:  time.Now().Unix(),
 		chSend:  make(chan pendingMessage, agentWriteBacklog),
-		decoder: codec.NewDecoder(),
+		decoder: app.packetDecoder,
 	}
 
 	// binding session
@@ -261,7 +261,7 @@ func (a *agent) write() {
 			}
 
 			// packet encode
-			p, err := codec.Encode(packet.Data, em)
+			p, err := app.packetEncoder.Encode(packet.Data, em)
 			if err != nil {
 				logger.Error(err)
 				break

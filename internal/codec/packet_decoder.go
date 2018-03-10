@@ -18,12 +18,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package packet
+package codec
 
-// Packet interface
-type Packet interface {
-	GetType() Type
-	GetLength() int
-	GetData() []byte
-	String() string
+import "github.com/lonnng/nano/internal/packet"
+
+// PacketDecoder interface
+type PacketDecoder interface {
+	Decode(data []byte) ([]packet.Packet, error)
 }

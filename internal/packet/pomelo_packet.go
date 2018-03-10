@@ -1,4 +1,4 @@
-// Copyright (c) TFG Co. All Rights Reserved.
+// Copyright (c) nano Author. All Rights Reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,10 +20,38 @@
 
 package packet
 
-// Packet interface
-type Packet interface {
-	GetType() Type
-	GetLength() int
-	GetData() []byte
-	String() string
+import (
+	"fmt"
+)
+
+// PomeloPacket represents a network packet.
+type PomeloPacket struct {
+	Type   Type
+	Length int
+	Data   []byte
+}
+
+//New create a PomeloPacket instance.
+func New() *PomeloPacket {
+	return &PomeloPacket{}
+}
+
+// GetType returns the packet type
+func (p *PomeloPacket) GetType() Type {
+	return p.Type
+}
+
+// GetLength returns the packet length
+func (p *PomeloPacket) GetLength() int {
+	return p.Length
+}
+
+// GetData returns the packet data
+func (p *PomeloPacket) GetData() []byte {
+	return p.Data
+}
+
+//String represents the PomeloPacket's in text mode.
+func (p *PomeloPacket) String() string {
+	return fmt.Sprintf("Type: %d, Length: %d, Data: %s", p.Type, p.Length, string(p.Data))
 }
