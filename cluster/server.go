@@ -20,8 +20,16 @@
 
 package cluster
 
-// ServiceDiscovery is the interface for a service discovery client
-type ServiceDiscovery interface {
-	Start(server *Server)
-	Stop()
+// Server struct
+type Server struct {
+	ID   string
+	Type string
+}
+
+// NewServer ctor
+func NewServer(id, serverType string) *Server {
+	return &Server{
+		ID:   id,
+		Type: serverType,
+	}
 }

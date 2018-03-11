@@ -318,6 +318,7 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 	logger.Log.Debugf("UID=%d, Message={%s}, Data=%+v", agent.session.UID(), msg.String(), data)
 
 	args := []reflect.Value{handler.Receiver, agent.srv, reflect.ValueOf(data)}
+	// TODO middlewares
 	h.chLocalProcess <- unhandledMessage{agent, lastMid, handler.Method, args}
 }
 

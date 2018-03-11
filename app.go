@@ -30,6 +30,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lonnng/nano/acceptor"
+	"github.com/lonnng/nano/cluster"
 	"github.com/lonnng/nano/component"
 	"github.com/lonnng/nano/internal/codec"
 	"github.com/lonnng/nano/internal/message"
@@ -40,16 +41,17 @@ import (
 
 // App is the base app struct
 type App struct {
-	serverType    string
-	serverID      string
-	debug         bool
-	startAt       time.Time
-	dieChan       chan bool
-	acceptors     []acceptor.Acceptor
-	heartbeat     time.Duration
-	packetDecoder codec.PacketDecoder
-	packetEncoder codec.PacketEncoder
-	serializer    serialize.Serializer
+	serverType       string
+	serverID         string
+	debug            bool
+	startAt          time.Time
+	dieChan          chan bool
+	acceptors        []acceptor.Acceptor
+	heartbeat        time.Duration
+	packetDecoder    codec.PacketDecoder
+	packetEncoder    codec.PacketEncoder
+	serializer       serialize.Serializer
+	serviceDiscovery cluster.ServiceDiscovery
 }
 
 var (
@@ -97,6 +99,11 @@ func SetHeartbeatTime(interval time.Duration) {
 	app.heartbeat = interval
 }
 
+// SetServiceDiscoveryClient to be used
+func SetServiceDiscoveryClient(s cluster.ServiceDiscovery) {
+	app.serviceDiscovery = s
+}
+
 // SetSerializer customize application serializer, which automatically Marshal
 // and UnMarshal handler payload
 func SetSerializer(seri serialize.Serializer) {
@@ -109,7 +116,31 @@ func SetServerType(t string) {
 }
 
 // Start starts the app
-func Start() {
+func Start(clusterMode ...bool) {
+	if len(clusterMode) > 0 {
+		if clusterMode[0] == true {
+			if app.serviceDiscovery == nil {
+				// initialize default service discovery
+				// TODO remove this, force specifying
+				var err error
+				app.serviceDiscovery, err = cluster.NewEtcdServiceDiscovery(
+					[]string{"localhost:2379"},
+					time.Duration(5)*time.Second,
+					"nano/",
+					time.Duration(20)*time.Second,
+					time.Duration(60)*time.Second,
+					time.Duration(20)*time.Second,
+				)
+				if err != nil {
+					logger.Log.Fatalf("error starting cluster service discovery component: %s", err.Error())
+				}
+			}
+			app.serviceDiscovery.Start(&cluster.Server{
+				ID:   app.serverID,
+				Type: app.serverType,
+			})
+		}
+	}
 	listen()
 }
 
