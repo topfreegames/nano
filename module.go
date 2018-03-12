@@ -17,17 +17,42 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+package nano
 
-package cluster
+import (
+	"github.com/lonnng/nano/module"
+)
 
-// ServiceDiscovery is the interface for a service discovery client
-type ServiceDiscovery interface {
-	GetServers() map[string]*Server
-	GetServersByType(serverType string) []*Server
-	GetServer(id string) *Server
-	SyncServers() error
-	Init() error
-	AfterInit()
-	BeforeShutdown()
-	Shutdown() error
+var (
+	// Modules are the modules that will be used by the app
+	modules = make(map[string]module.Module)
+)
+
+func startModules() {
+	log.Debug("initializing all modules")
+	for name, mod := range modules {
+		log.Debug("initializing module: %s", name)
+		if err := mod.Init(); err != nil {
+			log.Errorf("error starting module %s, error: %s", name, err.Error())
+		}
+	}
+
+	for name, mod := range modules {
+		mod.AfterInit()
+		log.Infof("module: %s successfully loaded", name)
+	}
+}
+
+// shutdownModules shutdown the modules
+func shutdownModules() {
+	for _, mod := range modules {
+		mod.BeforeShutdown()
+	}
+	for name, mod := range modules {
+		log.Debugf("stopping module: %s", name)
+		if err := mod.Shutdown(); err != nil {
+			log.Warnf("error stopping module: %s", name)
+		}
+		log.Infof("module: %s stopped!", name)
+	}
 }

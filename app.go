@@ -21,6 +21,7 @@
 package nano
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"reflect"
@@ -35,6 +36,7 @@ import (
 	"github.com/lonnng/nano/internal/codec"
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/logger"
+	"github.com/lonnng/nano/module"
 	"github.com/lonnng/nano/serialize"
 	"github.com/lonnng/nano/serialize/protobuf"
 )
@@ -43,6 +45,7 @@ import (
 type App struct {
 	serverType       string
 	serverID         string
+	serverData       map[string]string
 	debug            bool
 	startAt          time.Time
 	dieChan          chan bool
@@ -59,6 +62,7 @@ var (
 		serverID:      uuid.New().String(),
 		debug:         false,
 		serverType:    "game",
+		serverData:    map[string]string{},
 		startAt:       time.Now(),
 		dieChan:       make(chan bool),
 		acceptors:     []acceptor.Acceptor{},
@@ -67,6 +71,7 @@ var (
 		packetEncoder: codec.NewPomeloPacketEncoder(),
 		serializer:    protobuf.NewSerializer(),
 	}
+	log = logger.Log
 )
 
 // GetApp gets the app
@@ -115,6 +120,11 @@ func SetServerType(t string) {
 	app.serverType = t
 }
 
+// SetServerData sets the server data that will be broadcasted using service discovery to other servers
+func SetServerData(data map[string]string) {
+	app.serverData = data
+}
+
 // Start starts the app
 func Start(clusterMode ...bool) {
 	if len(clusterMode) > 0 {
@@ -130,29 +140,49 @@ func Start(clusterMode ...bool) {
 					time.Duration(20)*time.Second,
 					time.Duration(60)*time.Second,
 					time.Duration(20)*time.Second,
+					cluster.NewServer(app.serverID, app.serverType),
 				)
 				if err != nil {
-					logger.Log.Fatalf("error starting cluster service discovery component: %s", err.Error())
+					log.Fatalf("error starting cluster service discovery component: %s", err.Error())
 				}
 			}
-			app.serviceDiscovery.Start(&cluster.Server{
-				ID:   app.serverID,
-				Type: app.serverType,
-			})
+			RegisterModule(app.serviceDiscovery, "serviceDiscovery")
 		}
 	}
+	// on shotdown TODO now delete sv info
+
 	listen()
+
+	sg := make(chan os.Signal)
+	signal.Notify(sg, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL)
+
+	// stop server
+	select {
+	case <-app.dieChan:
+		log.Warn("The app will shutdown in a few seconds")
+	case s := <-sg:
+		log.Warn("got signal", s)
+	}
+
+	log.Warn("server is stopping...")
+
+	shutdownModules()
+	// shutdown all components registered by application, that
+	// call by reverse order against register
+	shutdownComponents()
+
 }
 
 func listen() {
 	hbdEncode()
+	startModules()
 	startupComponents()
 
 	// create global ticker instance, timer precision could be customized
 	// by SetTimerPrecision
 	globalTicker = time.NewTicker(timerPrecision)
 
-	logger.Log.Infof("starting server %s:%s", app.serverType, app.serverID)
+	log.Infof("starting server %s:%s", app.serverType, app.serverID)
 
 	// startup logic dispatcher
 	go handler.dispatch()
@@ -170,25 +200,8 @@ func listen() {
 			a.ListenAndServe()
 		}()
 
-		logger.Log.Infof("listening with acceptor %s on addr %s", reflect.TypeOf(a), a.GetAddr())
+		log.Infof("listening with acceptor %s on addr %s", reflect.TypeOf(a), a.GetAddr())
 	}
-
-	sg := make(chan os.Signal)
-	signal.Notify(sg, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGKILL)
-
-	// stop server
-	select {
-	case <-app.dieChan:
-		logger.Log.Warn("The app will shutdown in a few seconds")
-	case s := <-sg:
-		logger.Log.Warn("got signal", s)
-	}
-
-	logger.Log.Warn("server is stopping...")
-
-	// shutdown all components registered by application, that
-	// call by reverse order against register
-	shutdownComponents()
 }
 
 // SetDictionary set routes map, TODO(warning): set dictionary in runtime would be a dangerous operation!!!!!!
@@ -199,6 +212,17 @@ func SetDictionary(dict map[string]uint16) {
 // Register register a component with options
 func Register(c component.Component, options ...component.Option) {
 	comps = append(comps, regComp{c, options})
+}
+
+// RegisterModule register a module
+func RegisterModule(m module.Module, name string) error {
+	if _, ok := modules[name]; ok {
+		return fmt.Errorf(
+			"a module names %s was already registered", name,
+		)
+	}
+	modules[name] = m
+	return nil
 }
 
 // Shutdown send a signal to let 'nano' shutdown itself.

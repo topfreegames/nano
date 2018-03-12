@@ -20,14 +20,8 @@
 
 package cluster
 
-// ServiceDiscovery is the interface for a service discovery client
-type ServiceDiscovery interface {
-	GetServers() map[string]*Server
-	GetServersByType(serverType string) []*Server
-	GetServer(id string) *Server
-	SyncServers() error
-	Init() error
-	AfterInit()
-	BeforeShutdown()
-	Shutdown() error
-}
+import "github.com/lonnng/nano/logger"
+
+var (
+	log = logger.Log
+)

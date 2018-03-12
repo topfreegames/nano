@@ -46,6 +46,7 @@ type (
 	}
 )
 
+// NewService creates a new service
 func NewService(comp Component, opts []Option) *Service {
 	s := &Service{
 		Type:     reflect.TypeOf(comp),

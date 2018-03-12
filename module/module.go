@@ -18,14 +18,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package cluster
+package module
 
-// ServiceDiscovery is the interface for a service discovery client
-type ServiceDiscovery interface {
-	GetServers() map[string]*Server
-	GetServersByType(serverType string) []*Server
-	GetServer(id string) *Server
-	SyncServers() error
+// Module is the interface that represent a component.
+type Module interface {
 	Init() error
 	AfterInit()
 	BeforeShutdown()

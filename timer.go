@@ -1,8 +1,6 @@
 package nano
 
 import (
-	"fmt"
-	"log"
 	"math"
 	"sync/atomic"
 	"time"
@@ -86,7 +84,7 @@ func (t *Timer) Stop() {
 func pexec(id int64, fn TimerFunc) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println(fmt.Sprintf("Call timer function error, TimerID=%d, Error=%v", id, err))
+			log.Errorf("Call timer function error, TimerID=%d, Error=%v", id, err)
 			println(stack())
 		}
 	}()

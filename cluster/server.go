@@ -20,16 +20,41 @@
 
 package cluster
 
+import (
+	"encoding/json"
+
+	"github.com/lonnng/nano/logger"
+)
+
 // Server struct
 type Server struct {
 	ID   string
 	Type string
+	Data map[string]string
 }
 
 // NewServer ctor
-func NewServer(id, serverType string) *Server {
+func NewServer(id, serverType string, data ...map[string]string) *Server {
+	d := make(map[string]string)
+	if len(data) > 0 {
+		d = data[0]
+	}
 	return &Server{
 		ID:   id,
 		Type: serverType,
+		Data: d,
 	}
+}
+
+// GetDataAsJSONString returns data as a json string
+func (s *Server) GetDataAsJSONString() string {
+	if s.Data == nil {
+		return "{}"
+	}
+	str, err := json.Marshal(s.Data)
+	if err != nil {
+		logger.Log.Errorf("error getting server data as json: %s", err.Error())
+		return ""
+	}
+	return string(str)
 }

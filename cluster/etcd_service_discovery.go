@@ -22,12 +22,14 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/namespace"
-	"github.com/lonnng/nano/logger"
 )
 
 // EtcdServiceDiscovery struct
@@ -37,6 +39,10 @@ type EtcdServiceDiscovery struct {
 	syncServersInterval time.Duration
 	heartbeatTTL        time.Duration
 	leaseID             clientv3.LeaseID
+	serverMapByType     sync.Map
+	serverMapByID       sync.Map
+	running             bool
+	server              *Server
 }
 
 // NewEtcdServiceDiscovery ctor
@@ -47,7 +53,8 @@ func NewEtcdServiceDiscovery(
 	etcdPrefix string,
 	heartbeatInterval time.Duration,
 	heartbeatTTL time.Duration,
-	syncServersInterval time.Duration) (ServiceDiscovery, error) {
+	syncServersInterval time.Duration,
+	server *Server) (ServiceDiscovery, error) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   endpoints,
 		DialTimeout: etcdDialTimeout,
@@ -66,6 +73,8 @@ func NewEtcdServiceDiscovery(
 		heartbeatInterval:   heartbeatInterval,
 		syncServersInterval: syncServersInterval,
 		heartbeatTTL:        heartbeatTTL,
+		running:             false,
+		server:              server,
 	}
 
 	return sd, nil
@@ -86,33 +95,28 @@ func (sd *EtcdServiceDiscovery) bootstrapServer(server *Server) error {
 	_, err := sd.cli.Put(
 		context.TODO(),
 		getKey(server.ID, server.Type),
-		fmt.Sprintf("%d", time.Now().Unix()),
+		server.GetDataAsJSONString(),
 		clientv3.WithLease(sd.leaseID),
 	)
 	if err != nil {
 		return err
 	}
 
-	keys, err := sd.cli.Get(context.TODO(), "servers/", clientv3.WithPrefix())
+	sd.SyncServers()
+
+	return nil
+}
+
+// Init starts the service discovery client
+func (sd *EtcdServiceDiscovery) Init() error {
+	err := sd.bootstrapLease()
 	if err != nil {
 		return err
 	}
 
-	logger.Log.Debugf("got servers %s", keys)
-	return nil
-}
-
-// Start starts sending heartbeats, it should receive a server obj with current server info
-func (sd *EtcdServiceDiscovery) Start(server *Server) {
-
-	err := sd.bootstrapLease()
+	err = sd.bootstrapServer(sd.server)
 	if err != nil {
-		logger.Log.Fatalf("error grabbing etcdv3 lease: %s", err.Error())
-	}
-
-	err = sd.bootstrapServer(server)
-	if err != nil {
-		logger.Log.Fatalf("error bootstrapping server info to etcdv3: %s", err.Error())
+		return err
 	}
 
 	// send heartbeats
@@ -121,7 +125,7 @@ func (sd *EtcdServiceDiscovery) Start(server *Server) {
 		for range heartbeatTicker.C {
 			err := sd.Heartbeat()
 			if err != nil {
-				logger.Log.Errorf("error sending heartbeat to etcd: %s", err.Error())
+				log.Errorf("error sending heartbeat to etcd: %s", err.Error())
 			}
 		}
 	}()
@@ -130,25 +134,89 @@ func (sd *EtcdServiceDiscovery) Start(server *Server) {
 	syncServersTicker := time.NewTimer(sd.syncServersInterval)
 	go func() {
 		for range syncServersTicker.C {
-			err := sd.UpdateServers()
+			err := sd.SyncServers()
 			if err != nil {
-				logger.Log.Errorf("error resyncing servers: %s", err.Error())
+				log.Errorf("error resyncing servers: %s", err.Error())
 			}
 		}
 	}()
-	// watch changes
 
-	sd.watchEtcdChanges()
+	go sd.watchEtcdChanges()
+	return nil
 }
 
-// UpdateServers gets all servers from etcd
-func (sd *EtcdServiceDiscovery) UpdateServers() (map[string][]*Server, error) {
-	return nil, nil
+// AfterInit executes after Init
+func (sd *EtcdServiceDiscovery) AfterInit() {
+}
+
+// BeforeShutdown executes before shutting down
+func (sd *EtcdServiceDiscovery) BeforeShutdown() {
+}
+
+// Shutdown executes on shutdown and will clean etcd
+func (sd *EtcdServiceDiscovery) Shutdown() error {
+	return nil
+}
+
+// GetServers returns a map with all types as keys and an array of servers
+func (sd *EtcdServiceDiscovery) GetServers() map[string]*Server {
+	// TODO implement
+	return nil
+}
+
+// GetServersByType returns a slice with all the servers of a certain type
+func (sd *EtcdServiceDiscovery) GetServersByType(serverType string) []*Server {
+	// TODO implement
+	return nil
+}
+
+// GetServer returns a server given it's id
+func (sd *EtcdServiceDiscovery) GetServer(id string) *Server {
+	// TODO implement
+	return nil
+}
+
+// SyncServers gets all servers from etcd
+func (sd *EtcdServiceDiscovery) SyncServers() error {
+	keys, err := sd.cli.Get(context.TODO(), "servers/", clientv3.WithPrefix())
+	if err != nil {
+		return err
+	}
+
+	for _, kv := range keys.Kvs {
+		sv := string(kv.Key)
+		var svData map[string]string
+		err := json.Unmarshal(kv.Value, &svData)
+		if err != nil {
+			log.Warnf("failed to load data for server %s", sv)
+		}
+		splittedServer := strings.Split(sv, "/")
+		if len(splittedServer) != 3 {
+			log.Error("error getting server %s type and id (server name can't contain /)", sv)
+			continue
+		}
+		svType := splittedServer[1]
+		svID := splittedServer[2]
+		newSv := NewServer(svID, svType, svData)
+		log.Debugf("server: %s/%s loaded from etcd with data %s", newSv.Type, newSv.ID, newSv.Data)
+		listSvByType, ok := sd.serverMapByType.Load(svType)
+		if !ok {
+			listSvByType = []*Server{}
+		}
+		listSvByType = append(listSvByType.([]*Server), newSv)
+		sd.serverMapByType.Store(svType, listSvByType)
+	}
+	sd.serverMapByType.Range(func(k, v interface{}) bool {
+		log.Debugf("type: %s, servers: %s", k, v)
+		return true
+	})
+
+	return nil
 }
 
 // Heartbeat sends a heartbeat to etcd
 func (sd *EtcdServiceDiscovery) Heartbeat() error {
-	logger.Log.Debugf("renewing heartbeat with lease %s", sd.leaseID)
+	log.Debugf("renewing heartbeat with lease %s", sd.leaseID)
 	_, err := sd.cli.KeepAliveOnce(context.TODO(), sd.leaseID)
 	if err != nil {
 		return err
@@ -159,16 +227,16 @@ func (sd *EtcdServiceDiscovery) Heartbeat() error {
 // Stop stops the service discovery client
 func (sd *EtcdServiceDiscovery) Stop() {
 	defer sd.cli.Close()
-	logger.Log.Warn("stopping etcd service discovery client")
+	log.Warn("stopping etcd service discovery client")
 }
 
 func (sd *EtcdServiceDiscovery) watchEtcdChanges() {
 	w := sd.cli.Watch(context.Background(), "servers/", clientv3.WithPrefix())
 
 	go func(chn clientv3.WatchChan) {
-		for wresp := range chn {
-			for _, ev := range wresp.Events {
-				logger.Log.Info("hello ev %s", ev)
+		for wResp := range chn {
+			for _, ev := range wResp.Events {
+				log.Info("hello ev %s", ev)
 			}
 		}
 	}(w)
