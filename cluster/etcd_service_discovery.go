@@ -144,7 +144,6 @@ func (sd *etcdServiceDiscovery) deleteLocalInvalidServers(actualServers []string
 	sd.serverMapByID.Range(func(key interface{}, value interface{}) bool {
 		k := key.(string)
 		if !util.SliceContainsString(actualServers, k) {
-			fmt.Printf("aff naaam %s, %s\n", actualServers, k)
 			log.Warnf("deleting invalid local server %s", k)
 			sd.deleteServer(k)
 		}
