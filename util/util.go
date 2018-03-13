@@ -18,15 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package cluster
+package util
 
-// ServiceDiscovery is the interface for a service discovery client
-type ServiceDiscovery interface {
-	GetServersByType(serverType string) ([]*Server, error)
-	GetServer(id string) (*Server, error)
-	SyncServers() error
-	Init() error
-	AfterInit()
-	BeforeShutdown()
-	Shutdown() error
+// SliceContainsString returns true if a slice contains the string
+func SliceContainsString(slice []string, str string) bool {
+	for _, value := range slice {
+		if value == str {
+			return true
+		}
+	}
+	return false
 }

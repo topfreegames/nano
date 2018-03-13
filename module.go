@@ -31,7 +31,7 @@ var (
 func startModules() {
 	log.Debug("initializing all modules")
 	for name, mod := range modules {
-		log.Debug("initializing module: %s", name)
+		log.Debugf("initializing module: %s", name)
 		if err := mod.Init(); err != nil {
 			log.Errorf("error starting module %s, error: %s", name, err.Error())
 		}

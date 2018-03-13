@@ -30,10 +30,10 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/namespace"
+	"github.com/lonnng/nano/util"
 )
 
-// EtcdServiceDiscovery struct
-type EtcdServiceDiscovery struct {
+type etcdServiceDiscovery struct {
 	cli                 *clientv3.Client
 	heartbeatInterval   time.Duration
 	syncServersInterval time.Duration
@@ -43,6 +43,7 @@ type EtcdServiceDiscovery struct {
 	serverMapByID       sync.Map
 	running             bool
 	server              *Server
+	stopChan            chan bool
 }
 
 // NewEtcdServiceDiscovery ctor
@@ -68,19 +69,20 @@ func NewEtcdServiceDiscovery(
 	cli.Watcher = namespace.NewWatcher(cli.Watcher, etcdPrefix)
 	cli.Lease = namespace.NewLease(cli.Lease, etcdPrefix)
 
-	sd := &EtcdServiceDiscovery{
+	sd := &etcdServiceDiscovery{
 		cli:                 cli,
 		heartbeatInterval:   heartbeatInterval,
 		syncServersInterval: syncServersInterval,
 		heartbeatTTL:        heartbeatTTL,
 		running:             false,
 		server:              server,
+		stopChan:            make(chan bool),
 	}
 
 	return sd, nil
 }
 
-func (sd *EtcdServiceDiscovery) bootstrapLease() error {
+func (sd *etcdServiceDiscovery) bootstrapLease() error {
 	// grab lease
 	l, err := sd.cli.Grant(context.TODO(), int64(sd.heartbeatTTL.Seconds()))
 	if err != nil {
@@ -90,7 +92,7 @@ func (sd *EtcdServiceDiscovery) bootstrapLease() error {
 	return nil
 }
 
-func (sd *EtcdServiceDiscovery) bootstrapServer(server *Server) error {
+func (sd *etcdServiceDiscovery) bootstrapServer(server *Server) error {
 	// put key
 	_, err := sd.cli.Put(
 		context.TODO(),
@@ -107,8 +109,84 @@ func (sd *EtcdServiceDiscovery) bootstrapServer(server *Server) error {
 	return nil
 }
 
+// AfterInit executes after Init
+func (sd *etcdServiceDiscovery) AfterInit() {
+}
+
+// BeforeShutdown executes before shutting down
+func (sd *etcdServiceDiscovery) BeforeShutdown() {
+}
+
+func (sd *etcdServiceDiscovery) deleteServer(serverID string) {
+	toDelete := -1
+	if actual, ok := sd.serverMapByID.Load(serverID); ok {
+		sv := actual.(*Server)
+		sd.serverMapByID.Delete(sv.ID)
+		if svList, ok := sd.serverMapByType.Load(sv.Type); ok {
+			list := svList.([]*Server)
+			for i, sv := range list {
+				if sv.ID == serverID {
+					toDelete = i
+				}
+			}
+			if toDelete > -1 {
+				list[toDelete] = list[len(list)-1]
+				list[len(list)-1] = nil
+				list = list[:len(list)-1]
+				sd.serverMapByType.Store(sv.Type, list)
+			}
+		}
+
+	}
+}
+
+func (sd *etcdServiceDiscovery) deleteLocalInvalidServers(actualServers []string) {
+	sd.serverMapByID.Range(func(key interface{}, value interface{}) bool {
+		k := key.(string)
+		if !util.SliceContainsString(actualServers, k) {
+			fmt.Printf("aff naaam %s, %s\n", actualServers, k)
+			log.Warnf("deleting invalid local server %s", k)
+			sd.deleteServer(k)
+		}
+		return true
+	})
+}
+
+func getKey(serverID, serverType string) string {
+	return fmt.Sprintf("servers/%s/%s", serverType, serverID)
+}
+
+func (sd *etcdServiceDiscovery) getServerFromEtcd(serverType, serverID string) (*Server, error) {
+	svKey := getKey(serverID, serverType)
+	svEInfo, err := sd.cli.Get(context.TODO(), svKey)
+	if err != nil {
+		return nil, fmt.Errorf("error getting server: %s from etcd, error: %s", svKey, err.Error())
+	}
+	if len(svEInfo.Kvs) == 0 {
+		return nil, fmt.Errorf("didn't found server: %s in etcd", svKey)
+	}
+	return parseServer(svEInfo.Kvs[0].Key, svEInfo.Kvs[0].Value)
+}
+
+// GetServersByType returns a slice with all the servers of a certain type
+func (sd *etcdServiceDiscovery) GetServersByType(serverType string) ([]*Server, error) {
+	if list, ok := sd.serverMapByType.Load(serverType); ok {
+		return list.([]*Server), nil
+	}
+	return nil, fmt.Errorf("couldn't find servers with type: %s", serverType)
+}
+
+// GetServer returns a server given it's id
+func (sd *etcdServiceDiscovery) GetServer(id string) (*Server, error) {
+	if sv, ok := sd.serverMapByID.Load(id); ok {
+		return sv.(*Server), nil
+	}
+	return nil, fmt.Errorf("coudn't find server with id: %s", id)
+}
+
 // Init starts the service discovery client
-func (sd *EtcdServiceDiscovery) Init() error {
+func (sd *etcdServiceDiscovery) Init() error {
+	sd.running = true
 	err := sd.bootstrapLease()
 	if err != nil {
 		return err
@@ -122,21 +200,31 @@ func (sd *EtcdServiceDiscovery) Init() error {
 	// send heartbeats
 	heartbeatTicker := time.NewTicker(sd.heartbeatInterval)
 	go func() {
-		for range heartbeatTicker.C {
-			err := sd.Heartbeat()
-			if err != nil {
-				log.Errorf("error sending heartbeat to etcd: %s", err.Error())
+		for sd.running {
+			select {
+			case <-heartbeatTicker.C:
+				err := sd.Heartbeat()
+				if err != nil {
+					log.Errorf("error sending heartbeat to etcd: %s", err.Error())
+				}
+			case <-sd.stopChan:
+				break
 			}
 		}
 	}()
 
 	// update servers
-	syncServersTicker := time.NewTimer(sd.syncServersInterval)
+	syncServersTicker := time.NewTicker(sd.syncServersInterval)
 	go func() {
-		for range syncServersTicker.C {
-			err := sd.SyncServers()
-			if err != nil {
-				log.Errorf("error resyncing servers: %s", err.Error())
+		for sd.running {
+			select {
+			case <-syncServersTicker.C:
+				err := sd.SyncServers()
+				if err != nil {
+					log.Errorf("error resyncing servers: %s", err.Error())
+				}
+			case <-sd.stopChan:
+				break
 			}
 		}
 	}()
@@ -145,77 +233,8 @@ func (sd *EtcdServiceDiscovery) Init() error {
 	return nil
 }
 
-// AfterInit executes after Init
-func (sd *EtcdServiceDiscovery) AfterInit() {
-}
-
-// BeforeShutdown executes before shutting down
-func (sd *EtcdServiceDiscovery) BeforeShutdown() {
-}
-
-// Shutdown executes on shutdown and will clean etcd
-func (sd *EtcdServiceDiscovery) Shutdown() error {
-	return nil
-}
-
-// GetServers returns a map with all types as keys and an array of servers
-func (sd *EtcdServiceDiscovery) GetServers() map[string]*Server {
-	// TODO implement
-	return nil
-}
-
-// GetServersByType returns a slice with all the servers of a certain type
-func (sd *EtcdServiceDiscovery) GetServersByType(serverType string) []*Server {
-	// TODO implement
-	return nil
-}
-
-// GetServer returns a server given it's id
-func (sd *EtcdServiceDiscovery) GetServer(id string) *Server {
-	// TODO implement
-	return nil
-}
-
-// SyncServers gets all servers from etcd
-func (sd *EtcdServiceDiscovery) SyncServers() error {
-	keys, err := sd.cli.Get(context.TODO(), "servers/", clientv3.WithPrefix())
-	if err != nil {
-		return err
-	}
-
-	for _, kv := range keys.Kvs {
-		sv := string(kv.Key)
-		var svData map[string]string
-		err := json.Unmarshal(kv.Value, &svData)
-		if err != nil {
-			log.Warnf("failed to load data for server %s", sv)
-		}
-		splittedServer := strings.Split(sv, "/")
-		if len(splittedServer) != 3 {
-			log.Error("error getting server %s type and id (server name can't contain /)", sv)
-			continue
-		}
-		svType := splittedServer[1]
-		svID := splittedServer[2]
-		newSv := NewServer(svID, svType, svData)
-		log.Debugf("server: %s/%s loaded from etcd with data %s", newSv.Type, newSv.ID, newSv.Data)
-		listSvByType, ok := sd.serverMapByType.Load(svType)
-		if !ok {
-			listSvByType = []*Server{}
-		}
-		listSvByType = append(listSvByType.([]*Server), newSv)
-		sd.serverMapByType.Store(svType, listSvByType)
-	}
-	sd.serverMapByType.Range(func(k, v interface{}) bool {
-		log.Debugf("type: %s, servers: %s", k, v)
-		return true
-	})
-
-	return nil
-}
-
 // Heartbeat sends a heartbeat to etcd
-func (sd *EtcdServiceDiscovery) Heartbeat() error {
+func (sd *etcdServiceDiscovery) Heartbeat() error {
 	log.Debugf("renewing heartbeat with lease %s", sd.leaseID)
 	_, err := sd.cli.KeepAliveOnce(context.TODO(), sd.leaseID)
 	if err != nil {
@@ -224,24 +243,136 @@ func (sd *EtcdServiceDiscovery) Heartbeat() error {
 	return nil
 }
 
+func parseEtcdKey(key string) (string, string, error) {
+	splittedServer := strings.Split(key, "/")
+	if len(splittedServer) != 3 {
+		return "", "", fmt.Errorf("error parsing etcd key %s (server name can't contain /)", key)
+	}
+	svType := splittedServer[1]
+	svID := splittedServer[2]
+	return svType, svID, nil
+}
+
+func parseServer(key []byte, value []byte) (*Server, error) {
+	sv := string(key)
+	var svData map[string]string
+	err := json.Unmarshal(value, &svData)
+	if err != nil {
+		log.Warnf("failed to load data for server %s, error: %s", sv, err.Error())
+	}
+	svType, svID, err := parseEtcdKey(sv)
+	return NewServer(svID, svType, svData), nil
+}
+
+func (sd *etcdServiceDiscovery) printServers() {
+	sd.serverMapByType.Range(func(k, v interface{}) bool {
+		log.Debugf("type: %s, servers: %s", k, v)
+		return true
+	})
+
+}
+
+// SyncServers gets all servers from etcd
+func (sd *etcdServiceDiscovery) SyncServers() error {
+	keys, err := sd.cli.Get(
+		context.TODO(),
+		"servers/",
+		clientv3.WithPrefix(),
+		clientv3.WithKeysOnly(),
+	)
+	if err != nil {
+		return err
+	}
+
+	// delete invalid servers (local ones that are not in etcd)
+	allIds := make([]string, 0)
+
+	// filter servers I need to grab info
+	for _, kv := range keys.Kvs {
+		svType, svID, err := parseEtcdKey(string(kv.Key))
+		if err != nil {
+			log.Warnf("failed to parse etcd key %s, error: %s", kv.Key, err.Error())
+		}
+		allIds = append(allIds, svID)
+		// TODO is this slow? if so we can paralellize
+		if _, ok := sd.serverMapByID.Load(svID); !ok {
+			log.Debugf("loading info from missing server: %s/%s", svType, svID)
+			sv, err := sd.getServerFromEtcd(svType, svID)
+			if err != nil {
+				log.Errorf("error getting server from etcd: %s, error: %s", svID, err.Error())
+				continue
+			}
+			sd.addServer(sv)
+		}
+	}
+	sd.deleteLocalInvalidServers(allIds)
+
+	sd.printServers()
+	return nil
+}
+
+// Shutdown executes on shutdown and will clean etcd
+func (sd *etcdServiceDiscovery) Shutdown() error {
+	sd.running = false
+	sd.stopChan <- true
+
+	_, err := sd.cli.Revoke(context.TODO(), sd.leaseID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Stop stops the service discovery client
-func (sd *EtcdServiceDiscovery) Stop() {
+func (sd *etcdServiceDiscovery) Stop() {
 	defer sd.cli.Close()
 	log.Warn("stopping etcd service discovery client")
 }
 
-func (sd *EtcdServiceDiscovery) watchEtcdChanges() {
+func (sd *etcdServiceDiscovery) addServer(sv *Server) {
+	if _, loaded := sd.serverMapByID.LoadOrStore(sv.ID, sv); !loaded {
+		listSvByType, ok := sd.serverMapByType.Load(sv.Type)
+		if !ok {
+			listSvByType = []*Server{}
+		}
+		listSvByType = append(listSvByType.([]*Server), sv)
+		sd.serverMapByType.Store(sv.Type, listSvByType)
+	}
+}
+
+func (sd *etcdServiceDiscovery) watchEtcdChanges() {
 	w := sd.cli.Watch(context.Background(), "servers/", clientv3.WithPrefix())
 
 	go func(chn clientv3.WatchChan) {
-		for wResp := range chn {
-			for _, ev := range wResp.Events {
-				log.Info("hello ev %s", ev)
+		for sd.running {
+			select {
+			case wResp := <-chn:
+				for _, ev := range wResp.Events {
+					switch ev.Type {
+					case clientv3.EventTypePut:
+						var sv *Server
+						var err error
+						if sv, err = parseServer(ev.Kv.Key, ev.Kv.Value); err != nil {
+							log.Error(err)
+							continue
+						}
+						sd.addServer(sv)
+						log.Debugf("server %s added", ev.Kv.Key)
+						sd.printServers()
+					case clientv3.EventTypeDelete:
+						_, svID, err := parseEtcdKey(string(ev.Kv.Key))
+						if err != nil {
+							log.Warn("failed to parse key from etcd: %s", ev.Kv.Key)
+							continue
+						}
+						sd.deleteServer(svID)
+						log.Debugf("server %s deleted", svID)
+						sd.printServers()
+					}
+				}
+			case <-sd.stopChan:
+				break
 			}
 		}
 	}(w)
-}
-
-func getKey(serverID, serverType string) string {
-	return fmt.Sprintf("servers/%s/%s", serverType, serverID)
 }

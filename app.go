@@ -139,8 +139,8 @@ func Start(clusterMode ...bool) {
 					"nano/",
 					time.Duration(20)*time.Second,
 					time.Duration(60)*time.Second,
-					time.Duration(20)*time.Second,
-					cluster.NewServer(app.serverID, app.serverType),
+					time.Duration(120)*time.Second,
+					cluster.NewServer(app.serverID, app.serverType, app.serverData),
 				)
 				if err != nil {
 					log.Fatalf("error starting cluster service discovery component: %s", err.Error())
@@ -175,7 +175,6 @@ func Start(clusterMode ...bool) {
 
 func listen() {
 	hbdEncode()
-	startModules()
 	startupComponents()
 
 	// create global ticker instance, timer precision could be customized
@@ -202,6 +201,7 @@ func listen() {
 
 		log.Infof("listening with acceptor %s on addr %s", reflect.TypeOf(a), a.GetAddr())
 	}
+	startModules()
 }
 
 // SetDictionary set routes map, TODO(warning): set dictionary in runtime would be a dangerous operation!!!!!!

@@ -128,9 +128,7 @@ func main() {
 	http.Handle("/web/", http.StripPrefix("/web/", http.FileServer(http.Dir("web"))))
 
 	//TODO need to fix that? nano.SetCheckOriginFunc(func(_ *http.Request) bool { return true })
-	ws := acceptor.NewWSAcceptor(":3250", "/nano")
-	tcp := acceptor.NewTCPAcceptor(":3255")
+	ws := acceptor.NewWSAcceptor(":3251", "/nano")
 	nano.AddAcceptor(ws)
-	nano.AddAcceptor(tcp)
 	nano.Start(true)
 }
