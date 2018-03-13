@@ -51,14 +51,18 @@ type (
 	// Agent corresponding a user, used for store raw conn information
 	agent struct {
 		// regular agent member
-		session *session.Session    // session
-		conn    net.Conn            // low-level conn fd
-		lastMid uint                // last message id
-		state   int32               // current agent state
-		chDie   chan struct{}       // wait for close
-		chSend  chan pendingMessage // push message queue
-		lastAt  int64               // last heartbeat unix time stamp
-		decoder codec.PacketDecoder // binary decoder
+		session         *session.Session      // session
+		conn            net.Conn              // low-level conn fd
+		lastMid         uint                  // last message id
+		state           int32                 // current agent state
+		chDie           chan struct{}         // wait for close
+		chSend          chan pendingMessage   // push message queue
+		chRecv          chan unhandledMessage // unhandledMessages
+		chStopWrite     chan struct{}         // stop writing messages
+		chStopHeartbeat chan struct{}         // stop heartbeats
+		chStopRead      chan struct{}         //stop reading
+		lastAt          int64                 // last heartbeat unix time stamp
+		decoder         codec.PacketDecoder   // binary decoder
 
 		srv reflect.Value // cached session reflect.Value
 	}
@@ -74,12 +78,16 @@ type (
 // Create new agent instance
 func newAgent(conn net.Conn) *agent {
 	a := &agent{
-		conn:    conn,
-		state:   statusStart,
-		chDie:   make(chan struct{}),
-		lastAt:  time.Now().Unix(),
-		chSend:  make(chan pendingMessage, agentWriteBacklog),
-		decoder: app.packetDecoder,
+		conn:            conn,
+		state:           statusStart,
+		chDie:           make(chan struct{}),
+		chStopWrite:     make(chan struct{}),
+		chStopHeartbeat: make(chan struct{}),
+		chStopRead:      make(chan struct{}),
+		lastAt:          time.Now().Unix(),
+		chSend:          make(chan pendingMessage, agentWriteBacklog),
+		chRecv:          make(chan unhandledMessage),
+		decoder:         app.packetDecoder,
 	}
 
 	// binding session
@@ -176,8 +184,11 @@ func (a *agent) Close() error {
 	case <-a.chDie:
 		// expect
 	default:
+		close(a.chStopWrite)
+		close(a.chStopHeartbeat)
+		close(a.chStopRead)
 		close(a.chDie)
-		handler.chCloseSession <- a.session
+		onSessionClosed(a.session)
 	}
 
 	return a.conn.Close()
@@ -202,16 +213,27 @@ func (a *agent) setStatus(state int32) {
 	atomic.StoreInt32(&a.state, state)
 }
 
-func (a *agent) write() {
+func (a *agent) handle() {
+	defer func() {
+		a.Close()
+		log.Debugf("Session handle goroutine exit, SessionID=%d, UID=%d", a.session.ID(), a.session.UID())
+	}()
+	go a.write()
+	go a.read()
+	go a.heartbeat()
+	select {
+	case <-a.chDie: // agent closed signal
+		return
+
+	case <-app.dieChan: // application quit
+		return
+	}
+}
+
+func (a *agent) heartbeat() {
 	ticker := time.NewTicker(app.heartbeat)
-	chWrite := make(chan []byte, agentWriteBacklog)
-	// clean func
 	defer func() {
 		ticker.Stop()
-		close(a.chSend)
-		close(chWrite)
-		a.Close()
-		logger.Log.Debugf("Session write goroutine exit, SessionID=%d, UID=%d", a.session.ID(), a.session.UID())
 	}()
 
 	for {
@@ -219,11 +241,45 @@ func (a *agent) write() {
 		case <-ticker.C:
 			deadline := time.Now().Add(-2 * app.heartbeat).Unix()
 			if a.lastAt < deadline {
-				logger.Log.Debugf("Session heartbeat timeout, LastTime=%d, Deadline=%d", a.lastAt, deadline)
+				log.Debugf("Session heartbeat timeout, LastTime=%d, Deadline=%d", a.lastAt, deadline)
+				close(a.chDie)
 				return
 			}
-			chWrite <- hbd
+			if _, err := a.conn.Write(hbd); err != nil {
+				close(a.chDie)
+				return
+			}
+		case <-a.chStopHeartbeat:
+			return
+		}
+	}
+}
 
+func (a *agent) read() {
+	defer func() {
+		close(a.chRecv)
+	}()
+	for {
+		select {
+		case m := <-a.chRecv:
+			a.lastMid = m.lastMid
+			pcall(m.handler, m.args)
+		case <-a.chStopRead:
+			return
+		}
+	}
+}
+
+func (a *agent) write() {
+	chWrite := make(chan []byte, agentWriteBacklog)
+	// clean func
+	defer func() {
+		close(a.chSend)
+		close(chWrite)
+	}()
+
+	for {
+		select {
 		case data := <-chWrite:
 			// close agent while low-level conn broken
 			if _, err := a.conn.Write(data); err != nil {
@@ -269,10 +325,7 @@ func (a *agent) write() {
 			}
 			chWrite <- p
 
-		case <-a.chDie: // agent closed signal
-			return
-
-		case <-app.dieChan: // application quit
+		case <-a.chStopWrite:
 			return
 		}
 	}

@@ -22,10 +22,13 @@ package cluster
 
 import "github.com/lonnng/nano/module"
 
-// ServiceDiscovery is the interface for a service discovery client
-type ServiceDiscovery interface {
-	GetServersByType(serverType string) ([]*Server, error)
-	GetServer(id string) (*Server, error)
-	SyncServers() error
+// RPCServer interface
+type RPCServer interface {
+	module.Module
+}
+
+// RPCClient interface
+type RPCClient interface {
+	Call(server *Server, route string, data []byte) ([]byte, error)
 	module.Module
 }

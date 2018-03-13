@@ -41,6 +41,9 @@ type etcdServiceDiscovery struct {
 	leaseID             clientv3.LeaseID
 	serverMapByType     sync.Map
 	serverMapByID       sync.Map
+	etcdEndpoints       []string
+	etcdPrefix          string
+	etcdDialTimeout     time.Duration
 	running             bool
 	server              *Server
 	stopChan            chan bool
@@ -56,25 +59,15 @@ func NewEtcdServiceDiscovery(
 	heartbeatTTL time.Duration,
 	syncServersInterval time.Duration,
 	server *Server) (ServiceDiscovery, error) {
-	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   endpoints,
-		DialTimeout: etcdDialTimeout,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// namespaced etcd :)
-	cli.KV = namespace.NewKV(cli.KV, etcdPrefix)
-	cli.Watcher = namespace.NewWatcher(cli.Watcher, etcdPrefix)
-	cli.Lease = namespace.NewLease(cli.Lease, etcdPrefix)
 
 	sd := &etcdServiceDiscovery{
-		cli:                 cli,
 		heartbeatInterval:   heartbeatInterval,
 		syncServersInterval: syncServersInterval,
 		heartbeatTTL:        heartbeatTTL,
 		running:             false,
+		etcdDialTimeout:     etcdDialTimeout,
+		etcdEndpoints:       endpoints,
+		etcdPrefix:          etcdPrefix,
 		server:              server,
 		stopChan:            make(chan bool),
 	}
@@ -186,7 +179,21 @@ func (sd *etcdServiceDiscovery) GetServer(id string) (*Server, error) {
 // Init starts the service discovery client
 func (sd *etcdServiceDiscovery) Init() error {
 	sd.running = true
-	err := sd.bootstrapLease()
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints:   sd.etcdEndpoints,
+		DialTimeout: sd.etcdDialTimeout,
+	})
+	if err != nil {
+		return err
+	}
+	sd.cli = cli
+
+	// namespaced etcd :)
+	cli.KV = namespace.NewKV(cli.KV, sd.etcdPrefix)
+	cli.Watcher = namespace.NewWatcher(cli.Watcher, sd.etcdPrefix)
+	cli.Lease = namespace.NewLease(cli.Lease, sd.etcdPrefix)
+
+	err = sd.bootstrapLease()
 	if err != nil {
 		return err
 	}

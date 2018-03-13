@@ -36,6 +36,7 @@ import (
 	"github.com/lonnng/nano/internal/codec"
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/logger"
+	"github.com/lonnng/nano/module"
 	"github.com/lonnng/nano/serialize"
 	"github.com/lonnng/nano/serialize/protobuf"
 )
@@ -54,6 +55,8 @@ type App struct {
 	packetEncoder    codec.PacketEncoder
 	serializer       serialize.Serializer
 	serviceDiscovery cluster.ServiceDiscovery
+	rpcServer        cluster.RPCServer
+	rpcClient        cluster.RPCClient
 }
 
 var (
@@ -103,6 +106,16 @@ func SetHeartbeatTime(interval time.Duration) {
 	app.heartbeat = interval
 }
 
+// SetRPCServer to be used
+func SetRPCServer(s cluster.RPCServer) {
+	app.rpcServer = s
+}
+
+// SetRPCClient to be used
+func SetRPCClient(s cluster.RPCClient) {
+	app.rpcClient = s
+}
+
 // SetServiceDiscoveryClient to be used
 func SetServiceDiscoveryClient(s cluster.ServiceDiscovery) {
 	app.serviceDiscovery = s
@@ -124,28 +137,69 @@ func SetServerData(data map[string]string) {
 	app.serverData = data
 }
 
+func startDefaultSD() {
+	// initialize default service discovery
+	// TODO remove this, force specifying
+	var err error
+	app.serviceDiscovery, err = cluster.NewEtcdServiceDiscovery(
+		[]string{"localhost:2379"},
+		time.Duration(5)*time.Second,
+		"nano/",
+		time.Duration(20)*time.Second,
+		time.Duration(60)*time.Second,
+		time.Duration(120)*time.Second,
+		cluster.NewServer(app.serverID, app.serverType, app.serverData),
+	)
+	if err != nil {
+		log.Fatalf("error starting cluster service discovery component: %s", err.Error())
+	}
+}
+
+func startDefaultRPCServer() {
+	// initialize default rpc server
+	// TODO remove this, force specifying
+	var err error
+	app.rpcServer = cluster.NewNatsRPCServer(
+		"nats://localhost:4222",
+		cluster.NewServer(app.serverID, app.serverType, app.serverData),
+	)
+	if err != nil {
+		log.Fatalf("error starting cluster rpc server component: %s", err.Error())
+	}
+}
+
+func startDefaultRPCClient() {
+	// initialize default rpc client
+	// TODO remove this, force specifying
+	var err error
+	app.rpcClient = cluster.NewNatsRPCClient(
+		"nats://localhost:4222",
+		cluster.NewServer(app.serverID, app.serverType, app.serverData),
+	)
+	if err != nil {
+		log.Fatalf("error starting cluster rpc client component: %s", err.Error())
+	}
+}
+
 // Start starts the app
 func Start(clusterMode ...bool) {
 	if len(clusterMode) > 0 {
 		if clusterMode[0] == true {
 			if app.serviceDiscovery == nil {
-				// initialize default service discovery
-				// TODO remove this, force specifying
-				var err error
-				app.serviceDiscovery, err = cluster.NewEtcdServiceDiscovery(
-					[]string{"localhost:2379"},
-					time.Duration(5)*time.Second,
-					"nano/",
-					time.Duration(20)*time.Second,
-					time.Duration(60)*time.Second,
-					time.Duration(120)*time.Second,
-					cluster.NewServer(app.serverID, app.serverType, app.serverData),
-				)
-				if err != nil {
-					log.Fatalf("error starting cluster service discovery component: %s", err.Error())
-				}
+				log.Warn("creating default service discovery because cluster mode is enabled, if you want to specify yours, use nano.SetServiceDiscoveryClient")
+				startDefaultSD()
+			}
+			if app.rpcServer == nil {
+				log.Warn("creating default rpc server because cluster mode is enabled, if you want to specify yours, use nano.SetRPCServer")
+				startDefaultRPCServer()
+			}
+			if app.rpcClient == nil {
+				log.Warn("creating default rpc client because cluster mode is enabled, if you want to specify yours, use nano.SetRPCClient")
+				startDefaultRPCClient()
 			}
 			RegisterModule(app.serviceDiscovery, "serviceDiscovery")
+			RegisterModule(app.rpcServer, "rpcServer")
+			RegisterModule(app.rpcClient, "rpcClient")
 		}
 	}
 	// on shotdown TODO now delete sv info
@@ -190,7 +244,7 @@ func listen() {
 		// gets connections from every acceptor and tell handlerservice to handle them
 		go func() {
 			for conn := range a.GetConnChan() {
-				handler.handle(conn)
+				go handler.handle(conn)
 			}
 		}()
 
@@ -201,6 +255,19 @@ func listen() {
 		log.Infof("listening with acceptor %s on addr %s", reflect.TypeOf(a), a.GetAddr())
 	}
 	startModules()
+}
+
+// RPC makes a remote procedure call
+// TODO send a stryct with data and route
+func RPC(serverID string, data []byte) ([]byte, error) {
+	if app.rpcClient == nil {
+		return nil, fmt.Errorf("rpc client not initialized, are you running in cluster mode?")
+	}
+	sv, err := app.serviceDiscovery.GetServer(serverID)
+	if err != nil {
+		return nil, err
+	}
+	return app.rpcClient.Call(sv, "teste", data)
 }
 
 // SetDictionary set routes map, TODO(warning): set dictionary in runtime would be a dangerous operation!!!!!!
@@ -214,7 +281,7 @@ func Register(c component.Component, options ...component.Option) {
 }
 
 // RegisterModule register a module
-func RegisterModule(m Module, name string) error {
+func RegisterModule(m module.Module, name string) error {
 	if _, ok := modules[name]; ok {
 		return fmt.Errorf(
 			"a module names %s was already registered", name,

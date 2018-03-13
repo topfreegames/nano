@@ -50,6 +50,22 @@
   version = "v1.2.0"
 
 [[projects]]
+  name = "github.com/nats-io/go-nats"
+  packages = [
+    ".",
+    "encoders/builtin",
+    "util"
+  ]
+  revision = "d66cb54e6b7bdd93f0b28afc8450d84c780dfb68"
+  version = "v1.4.0"
+
+[[projects]]
+  name = "github.com/nats-io/nuid"
+  packages = ["."]
+  revision = "289cccf02c178dc782430d534e3c1f5b72af807f"
+  version = "v1.0.0"
+
+[[projects]]
   name = "github.com/sirupsen/logrus"
   packages = ["."]
   revision = "d682213848ed68c0a260ca37d6dd5ace8423f5ba"
@@ -151,6 +167,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "9f7b54983be5ecd805a2a9e5193db29a88de25de10fdb4557498fc6cbb9721d8"
+  inputs-digest = "b99bcdc8d154e812c4812cf6d6e7341f871d977688af937b5fca206d7245c845"
   solver-name = "gps-cdcl"
   solver-version = 1

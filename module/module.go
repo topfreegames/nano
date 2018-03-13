@@ -18,14 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package cluster
+package module
 
-import "github.com/lonnng/nano/module"
-
-// ServiceDiscovery is the interface for a service discovery client
-type ServiceDiscovery interface {
-	GetServersByType(serverType string) ([]*Server, error)
-	GetServer(id string) (*Server, error)
-	SyncServers() error
-	module.Module
+// Module is the interface that represent a module.
+type Module interface {
+	Init() error
+	AfterInit()
+	BeforeShutdown()
+	Shutdown() error
 }

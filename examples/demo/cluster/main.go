@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -29,6 +30,12 @@ type (
 	UserMessage struct {
 		Name    string `json:"name"`
 		Content string `json:"content"`
+	}
+
+	// RPCMessage represents a rpc message
+	RPCMessage struct {
+		ServerID string `json:"serverID"`
+		Data     string `json:"data"`
 	}
 
 	// NewUser message will be received when new user join room
@@ -104,7 +111,21 @@ func (r *Room) Message(s *session.Session, msg *UserMessage) error {
 	return r.group.Broadcast("onMessage", msg)
 }
 
+// SendRPC send
+func (r *Room) SendRPC(s *session.Session, msg *RPCMessage) error {
+	res, err := nano.RPC(msg.ServerID, []byte(msg.Data))
+	if err != nil {
+		fmt.Printf("rpc error: %s", err)
+		return err
+	}
+	fmt.Printf("rpc res %s", res)
+	return nil
+}
+
 func main() {
+	port := flag.Int("port", 3250, "the port to listen")
+	flag.Parse()
+
 	defer (func() {
 		nano.Shutdown()
 	})()
@@ -128,7 +149,7 @@ func main() {
 	http.Handle("/web/", http.StripPrefix("/web/", http.FileServer(http.Dir("web"))))
 
 	//TODO need to fix that? nano.SetCheckOriginFunc(func(_ *http.Request) bool { return true })
-	ws := acceptor.NewWSAcceptor(":3251", "/nano")
+	ws := acceptor.NewWSAcceptor(fmt.Sprintf(":%d", *port), "/nano")
 	nano.AddAcceptor(ws)
 	nano.Start(true)
 }

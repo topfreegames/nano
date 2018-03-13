@@ -69,15 +69,12 @@ func hbdEncode() {
 
 type (
 	handlerService struct {
-		services       map[string]*component.Service // all registered service
-		handlers       map[string]*component.Handler // all handler method
-		chLocalProcess chan unhandledMessage         // packets that process locally
-		chCloseSession chan *session.Session         // closed session
-		chFunction     chan func()                   // function that called in logic gorontine
+		services   map[string]*component.Service // all registered service
+		handlers   map[string]*component.Handler // all handler method
+		chFunction chan func()                   // function that called in logic gorontine
 	}
 
 	unhandledMessage struct {
-		agent   *agent
 		lastMid uint
 		handler reflect.Method
 		args    []reflect.Value
@@ -86,11 +83,9 @@ type (
 
 func newHandlerService() *handlerService {
 	h := &handlerService{
-		services:       make(map[string]*component.Service),
-		handlers:       make(map[string]*component.Handler),
-		chLocalProcess: make(chan unhandledMessage, packetBacklog),
-		chCloseSession: make(chan *session.Session, packetBacklog),
-		chFunction:     make(chan func(), funcBacklog),
+		services:   make(map[string]*component.Service),
+		handlers:   make(map[string]*component.Handler),
+		chFunction: make(chan func(), funcBacklog),
 	}
 
 	return h
@@ -145,21 +140,12 @@ func onSessionClosed(s *session.Session) {
 func (h *handlerService) dispatch() {
 	// close chLocalProcess & chCloseSession when application quit
 	defer func() {
-		close(h.chLocalProcess)
-		close(h.chCloseSession)
 		globalTicker.Stop()
 	}()
 
 	// handle packet that sent to chLocalProcess
 	for {
 		select {
-		case m := <-h.chLocalProcess: // logic dispatch
-			m.agent.lastMid = m.lastMid
-			pcall(m.handler, m.args)
-
-		case s := <-h.chCloseSession: // session closed callback
-			onSessionClosed(s)
-
 		case fn := <-h.chFunction:
 			pinvoke(fn)
 
@@ -201,8 +187,8 @@ func (h *handlerService) handle(conn net.Conn) {
 	// create a client agent and startup write gorontine
 	agent := newAgent(conn)
 
-	// startup write goroutine
-	go agent.write()
+	// startup agent goroutine
+	go agent.handle()
 
 	logger.Log.Debugf("New session established: %s", agent.String())
 
@@ -319,7 +305,7 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 
 	args := []reflect.Value{handler.Receiver, agent.srv, reflect.ValueOf(data)}
 	// TODO middlewares
-	h.chLocalProcess <- unhandledMessage{agent, lastMid, handler.Method, args}
+	agent.chRecv <- unhandledMessage{lastMid, handler.Method, args}
 }
 
 // DumpServices outputs all registered services
