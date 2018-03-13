@@ -19,13 +19,17 @@
 // SOFTWARE.
 package nano
 
-import (
-	"github.com/lonnng/nano/module"
-)
+// Module is the interface that represent a module.
+type Module interface {
+	Init() error
+	AfterInit()
+	BeforeShutdown()
+	Shutdown() error
+}
 
 var (
 	// Modules are the modules that will be used by the app
-	modules = make(map[string]module.Module)
+	modules = make(map[string]Module)
 )
 
 func startModules() {

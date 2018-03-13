@@ -36,7 +36,6 @@ import (
 	"github.com/lonnng/nano/internal/codec"
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/logger"
-	"github.com/lonnng/nano/module"
 	"github.com/lonnng/nano/serialize"
 	"github.com/lonnng/nano/serialize/protobuf"
 )
@@ -215,7 +214,7 @@ func Register(c component.Component, options ...component.Option) {
 }
 
 // RegisterModule register a module
-func RegisterModule(m module.Module, name string) error {
+func RegisterModule(m Module, name string) error {
 	if _, ok := modules[name]; ok {
 		return fmt.Errorf(
 			"a module names %s was already registered", name,
