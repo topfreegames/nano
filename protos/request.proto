@@ -10,6 +10,8 @@ enum RPCType {
 message Request {
   string Route = 1;
   int64 SessionID = 2;
-  RPCType Type = 3;
-  bytes Data = 4;
+  uint64 RequestID = 3;
+  string FrontendID = 4;
+  RPCType Type = 5;
+  bytes Data = 6;
 }

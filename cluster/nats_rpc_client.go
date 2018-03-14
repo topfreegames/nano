@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/protos"
 	"github.com/lonnng/nano/route"
 	"github.com/lonnng/nano/session"
@@ -60,16 +61,23 @@ func (ns *NatsRPCClient) Call(
 	rpcType protos.RPCType,
 	route *route.Route,
 	session *session.Session,
-	args []byte,
+	msg *message.Message,
 	server *Server,
 ) ([]byte, error) {
 
-	// TODO I guess I'll also need to send the frontendserverid
+	mid := uint(0)
+	// TODO if response we should also pass msg id
+	if msg.Type == message.Request {
+		mid = msg.ID
+	}
+
 	req := protos.Request{
-		Route:     route.String(),
-		SessionID: session.ID(),
-		Type:      rpcType,
-		Data:      args,
+		Route:      route.String(),
+		SessionID:  session.ID(),
+		RequestID:  uint64(mid),
+		Type:       rpcType,
+		Data:       msg.Data,
+		FrontendID: ns.server.ID,
 	}
 
 	var marshalledData []byte
@@ -79,11 +87,11 @@ func (ns *NatsRPCClient) Call(
 		return nil, err
 	}
 
-	msg, err := ns.conn.Request(getChannel(server.Type, server.ID), marshalledData, ns.reqTimeout)
+	m, err := ns.conn.Request(getChannel(server.Type, server.ID), marshalledData, ns.reqTimeout)
 	if err != nil {
 		return nil, err
 	}
-	return msg.Data, nil
+	return m.Data, nil
 }
 
 // Init inits nats rpc server

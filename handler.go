@@ -286,7 +286,7 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 func (h *handlerService) remoteProcess(agent *agent, route *route.Route, msg *message.Message) {
 	var res []byte
 	var err error
-	if res, err = remoteCall(protos.RPCType_Sys, route, agent.session, msg.Data); err != nil {
+	if res, err = remoteCall(protos.RPCType_Sys, route, agent.session, msg); err != nil {
 		log.Errorf(err.Error())
 		return
 	}

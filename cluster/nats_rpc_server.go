@@ -73,7 +73,7 @@ func (ns *NatsRPCServer) handleMessages() {
 
 // TODO when dying need to die gracefully
 // TODO monitor dropped, chansize of subChan
-// TODO processar a mensagem e retornar resposta, usar protobuf? serializer?
+// TODO processar a mensagem e retornar resposta
 func (ns *NatsRPCServer) processUnhandledMessages(threadID int) {
 	for msg := range ns.unhandledMessages {
 		// TODO should deserializer be decoupled?
@@ -84,7 +84,7 @@ func (ns *NatsRPCServer) processUnhandledMessages(threadID int) {
 			log.Error("error unmarshalling rpc message:", err.Error())
 			continue
 		}
-		log.Debugf("(%d) processing message %v", threadID, req)
+		log.Debugf("(%d) processing message %v", threadID, req.RequestID)
 		time.Sleep(time.Duration(5) * time.Second)
 	}
 }

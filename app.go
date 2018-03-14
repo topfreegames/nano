@@ -263,7 +263,7 @@ func listen() {
 }
 
 // TODO own file?
-func remoteCall(rpcType protos.RPCType, route *route.Route, session *session.Session, args []byte) ([]byte, error) {
+func remoteCall(rpcType protos.RPCType, route *route.Route, session *session.Session, msg *message.Message) ([]byte, error) {
 	svType := route.SvType
 	//TODO this logic should be elsewhere, routing should be changeable
 	serversOfType, err := app.serviceDiscovery.GetServersByType(svType)
@@ -275,7 +275,7 @@ func remoteCall(rpcType protos.RPCType, route *route.Route, session *session.Ses
 	r := rand.New(s)
 	server := serversOfType[r.Intn(len(serversOfType))]
 
-	res, err := app.rpcClient.Call(rpcType, route, session, args, server)
+	res, err := app.rpcClient.Call(rpcType, route, session, msg, server)
 	if err != nil {
 		return nil, err
 	}

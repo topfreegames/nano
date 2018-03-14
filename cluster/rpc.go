@@ -21,6 +21,7 @@
 package cluster
 
 import (
+	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/module"
 	"github.com/lonnng/nano/protos"
 	"github.com/lonnng/nano/route"
@@ -34,6 +35,6 @@ type RPCServer interface {
 
 // RPCClient interface
 type RPCClient interface {
-	Call(rpcType protos.RPCType, route *route.Route, session *session.Session, args []byte, server *Server) ([]byte, error)
+	Call(rpcType protos.RPCType, route *route.Route, session *session.Session, msg *message.Message, server *Server) ([]byte, error)
 	module.Module
 }
