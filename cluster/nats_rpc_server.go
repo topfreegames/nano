@@ -22,6 +22,7 @@ package cluster
 
 import (
 	"fmt"
+	"time"
 
 	nats "github.com/nats-io/go-nats"
 )
@@ -31,8 +32,6 @@ type NatsRPCServer struct {
 	connString string
 	server     *Server
 	conn       *nats.Conn
-	inMsgChan  chan *nats.Msg
-	running    bool
 	stopChan   chan bool
 }
 
@@ -41,23 +40,14 @@ func NewNatsRPCServer(connectString string, server *Server) *NatsRPCServer {
 	ns := &NatsRPCServer{
 		connString: connectString,
 		server:     server,
-		inMsgChan:  make(chan *nats.Msg),
-		running:    false,
 		stopChan:   make(chan bool),
 	}
 	return ns
 }
 
-func (ns *NatsRPCServer) handleMessages() {
-	for ns.running {
-		select {
-		case msg := <-ns.inMsgChan:
-			log.Debugf("got msg from nats: %s", string(msg.Data))
-		case <-ns.stopChan:
-			ns.stop()
-			break
-		}
-	}
+func (ns *NatsRPCServer) handleMessages(msg *nats.Msg) {
+	log.Debugf("got msg from nats: %s", string(msg.Data))
+	time.Sleep(time.Duration(5) * time.Second)
 }
 
 // Init inits nats rpc server
@@ -67,15 +57,9 @@ func (ns *NatsRPCServer) Init() error {
 		return err
 	}
 	ns.conn = conn
-	ns.running = true
-	var c chan *nats.Msg
-	if c, err = ns.subscribe(getChannel(ns.server.Type, ns.server.ID)); err != nil {
+	if _, err = ns.subscribe(getChannel(ns.server.Type, ns.server.ID)); err != nil {
 		return err
 	}
-	ns.inMsgChan = c
-
-	go ns.handleMessages()
-
 	return nil
 }
 
@@ -91,16 +75,11 @@ func (ns *NatsRPCServer) Shutdown() error {
 	return nil
 }
 
-func (ns *NatsRPCServer) subscribe(topic string) (chan *nats.Msg, error) {
-	c := make(chan *nats.Msg)
-	if _, err := ns.conn.ChanSubscribe(topic, c); err != nil {
-		return nil, err
-	}
-	return c, nil
+func (ns *NatsRPCServer) subscribe(topic string) (*nats.Subscription, error) {
+	return ns.conn.Subscribe(topic, ns.handleMessages)
 }
 
 func (ns *NatsRPCServer) stop() {
-	ns.running = false
 }
 
 func getChannel(serverType, serverID string) string {
