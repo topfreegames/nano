@@ -31,6 +31,8 @@ import (
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/internal/packet"
 	"github.com/lonnng/nano/logger"
+	"github.com/lonnng/nano/protos"
+	"github.com/lonnng/nano/route"
 	"github.com/lonnng/nano/session"
 )
 
@@ -263,6 +265,36 @@ func (h *handlerService) processPacket(agent *agent, p *packet.Packet) error {
 }
 
 func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
+	r, err := route.Decode(msg.Route)
+
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
+
+	if r.SvType == "" {
+		r.SvType = app.server.Type
+	}
+
+	if r.SvType == app.server.Type {
+		h.localProcess(agent, r, msg)
+	} else {
+		h.remoteProcess(agent, r, msg)
+	}
+}
+
+func (h *handlerService) remoteProcess(agent *agent, route *route.Route, msg *message.Message) {
+	var res []byte
+	var err error
+	if res, err = remoteCall(protos.RPCType_Sys, route, agent.session, msg.Data); err != nil {
+		log.Errorf(err.Error())
+		return
+	}
+	// TODO remove
+	fmt.Printf("cool, got %s\n", res)
+}
+
+func (h *handlerService) localProcess(agent *agent, route *route.Route, msg *message.Message) {
 	var lastMid uint
 	switch msg.Type {
 	case message.Request:
@@ -271,7 +303,7 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 		lastMid = 0
 	}
 
-	handler, ok := h.handlers[msg.Route]
+	handler, ok := h.handlers[fmt.Sprintf("%s.%s", route.Service, route.Method)]
 	if !ok {
 		logger.Log.Warnf("nano/handler: %s not found(forgot registered?)", msg.Route)
 		return
@@ -304,8 +336,8 @@ func (h *handlerService) processMessage(agent *agent, msg *message.Message) {
 	logger.Log.Debugf("UID=%d, Message={%s}, Data=%+v", agent.session.UID(), msg.String(), data)
 
 	args := []reflect.Value{handler.Receiver, agent.srv, reflect.ValueOf(data)}
-	// TODO middlewares
 	agent.chRecv <- unhandledMessage{lastMid, handler.Method, args}
+
 }
 
 // DumpServices outputs all registered services

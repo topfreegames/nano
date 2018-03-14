@@ -24,6 +24,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang/protobuf/proto"
+	"github.com/lonnng/nano/protos"
+	"github.com/lonnng/nano/route"
+	"github.com/lonnng/nano/session"
 	nats "github.com/nats-io/go-nats"
 )
 
@@ -48,11 +52,34 @@ func NewNatsRPCClient(connectString string, server *Server) *NatsRPCClient {
 }
 
 // Call calls a method remotally
+// TODO use channel and create async Go method
 // TODO oh my, this is hacky! will it perform good?
 // even if it performs we need better concurrency control!!!
-func (ns *NatsRPCClient) Call(server *Server, route string, data []byte) ([]byte, error) {
-	topic := getChannel(server.Type, server.ID)
-	msg, err := ns.conn.Request(topic, data, ns.reqTimeout)
+// TODO should we permit bigger mailbox size? current design only allows 1 message per user to be processes at a time
+func (ns *NatsRPCClient) Call(
+	rpcType protos.RPCType,
+	route *route.Route,
+	session *session.Session,
+	args []byte,
+	server *Server,
+) ([]byte, error) {
+
+	// TODO I guess I'll also need to send the frontendserverid
+	req := protos.Request{
+		Route:     route.String(),
+		SessionID: session.ID(),
+		Type:      rpcType,
+		Data:      args,
+	}
+
+	var marshalledData []byte
+	var err error
+	marshalledData, err = proto.Marshal(&req)
+	if err != nil {
+		return nil, err
+	}
+
+	msg, err := ns.conn.Request(getChannel(server.Type, server.ID), marshalledData, ns.reqTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -79,14 +106,6 @@ func (ns *NatsRPCClient) BeforeShutdown() {}
 // Shutdown stops nats rpc server
 func (ns *NatsRPCClient) Shutdown() error {
 	return nil
-}
-
-func (ns *NatsRPCClient) subscribe(topic string) (chan *nats.Msg, error) {
-	c := make(chan *nats.Msg)
-	if _, err := ns.conn.ChanSubscribe(ns.getSubscribeChannel(), c); err != nil {
-		return nil, err
-	}
-	return c, nil
 }
 
 func (ns *NatsRPCClient) stop() {

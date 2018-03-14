@@ -24,15 +24,21 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang/protobuf/proto"
+	"github.com/lonnng/nano/protos"
 	nats "github.com/nats-io/go-nats"
 )
 
 // NatsRPCServer struct
 type NatsRPCServer struct {
-	connString string
-	server     *Server
-	conn       *nats.Conn
-	stopChan   chan bool
+	connString            string
+	server                *Server
+	conn                  *nats.Conn
+	stopChan              chan bool
+	subChan               chan *nats.Msg
+	sub                   *nats.Subscription
+	processMsgConcurrency int
+	unhandledMessages     chan *nats.Msg
 }
 
 // NewNatsRPCServer ctor
@@ -41,23 +47,60 @@ func NewNatsRPCServer(connectString string, server *Server) *NatsRPCServer {
 		connString: connectString,
 		server:     server,
 		stopChan:   make(chan bool),
+		// TODO configure max pending messages
+		subChan: make(chan *nats.Msg, 1000),
+		// TODO configure concurrency
+		processMsgConcurrency: 100,
+		unhandledMessages:     make(chan *nats.Msg),
 	}
 	return ns
 }
 
-func (ns *NatsRPCServer) handleMessages(msg *nats.Msg) {
-	log.Debugf("got msg from nats: %s", string(msg.Data))
-	time.Sleep(time.Duration(5) * time.Second)
+func (ns *NatsRPCServer) handleMessages() {
+	defer (func() {
+		close(ns.unhandledMessages)
+		close(ns.subChan)
+	})()
+	for {
+		select {
+		case msg := <-ns.subChan:
+			ns.unhandledMessages <- msg
+		case <-ns.stopChan:
+			return
+		}
+	}
+}
+
+// TODO when dying need to die gracefully
+// TODO monitor dropped, chansize of subChan
+// TODO processar a mensagem e retornar resposta, usar protobuf? serializer?
+func (ns *NatsRPCServer) processUnhandledMessages(threadID int) {
+	for msg := range ns.unhandledMessages {
+		// TODO should deserializer be decoupled?
+		req := &protos.Request{}
+		err := proto.Unmarshal(msg.Data, req)
+		if err != nil {
+			// should answer rpc with an error
+			log.Error("error unmarshalling rpc message:", err.Error())
+			continue
+		}
+		log.Debugf("(%d) processing message %v", threadID, req)
+		time.Sleep(time.Duration(5) * time.Second)
+	}
 }
 
 // Init inits nats rpc server
 func (ns *NatsRPCServer) Init() error {
+	go ns.handleMessages()
+	for i := 0; i < ns.processMsgConcurrency; i++ {
+		go ns.processUnhandledMessages(i)
+	}
 	conn, err := setupNatsConn(ns.connString)
 	if err != nil {
 		return err
 	}
 	ns.conn = conn
-	if _, err = ns.subscribe(getChannel(ns.server.Type, ns.server.ID)); err != nil {
+	if ns.sub, err = ns.subscribe(getChannel(ns.server.Type, ns.server.ID)); err != nil {
 		return err
 	}
 	return nil
@@ -76,7 +119,7 @@ func (ns *NatsRPCServer) Shutdown() error {
 }
 
 func (ns *NatsRPCServer) subscribe(topic string) (*nats.Subscription, error) {
-	return ns.conn.Subscribe(topic, ns.handleMessages)
+	return ns.conn.ChanSubscribe(topic, ns.subChan)
 }
 
 func (ns *NatsRPCServer) stop() {

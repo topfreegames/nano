@@ -28,32 +28,34 @@ import (
 
 // Server struct
 type Server struct {
-	ID   string
-	Type string
-	Data map[string]string
+	ID       string            `json:"id"`
+	Type     string            `json:"type"`
+	Data     map[string]string `json:"data"`
+	Frontend bool              `json:"frontend"`
 }
 
 // NewServer ctor
-func NewServer(id, serverType string, data ...map[string]string) *Server {
+func NewServer(id, serverType string, frontend bool, data ...map[string]string) *Server {
 	d := make(map[string]string)
 	if len(data) > 0 {
 		d = data[0]
 	}
 	return &Server{
-		ID:   id,
-		Type: serverType,
-		Data: d,
+		ID:       id,
+		Type:     serverType,
+		Data:     d,
+		Frontend: frontend,
 	}
 }
 
-// GetDataAsJSONString returns data as a json string
-func (s *Server) GetDataAsJSONString() string {
+// AsJSONString returns the server as a json string
+func (s *Server) AsJSONString() string {
 	if s.Data == nil {
 		return "{}"
 	}
-	str, err := json.Marshal(s.Data)
+	str, err := json.Marshal(s)
 	if err != nil {
-		logger.Log.Errorf("error getting server data as json: %s", err.Error())
+		logger.Log.Errorf("error getting server as json: %s", err.Error())
 		return ""
 	}
 	return string(str)

@@ -22,6 +22,7 @@ package nano
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"reflect"
@@ -37,15 +38,16 @@ import (
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/logger"
 	"github.com/lonnng/nano/module"
+	"github.com/lonnng/nano/protos"
+	"github.com/lonnng/nano/route"
 	"github.com/lonnng/nano/serialize"
 	"github.com/lonnng/nano/serialize/protobuf"
+	"github.com/lonnng/nano/session"
 )
 
 // App is the base app struct
 type App struct {
-	serverType       string
-	serverID         string
-	serverData       map[string]string
+	server           *cluster.Server
 	debug            bool
 	startAt          time.Time
 	dieChan          chan bool
@@ -61,10 +63,13 @@ type App struct {
 
 var (
 	app = &App{
-		serverID:      uuid.New().String(),
+		server: &cluster.Server{
+			ID:       uuid.New().String(),
+			Type:     "game",
+			Data:     map[string]string{},
+			Frontend: true,
+		},
 		debug:         false,
-		serverType:    "game",
-		serverData:    map[string]string{},
 		startAt:       time.Now(),
 		dieChan:       make(chan bool),
 		acceptors:     []acceptor.Acceptor{},
@@ -128,13 +133,15 @@ func SetSerializer(seri serialize.Serializer) {
 }
 
 // SetServerType sets the server type
+// TODO need to specify in start
 func SetServerType(t string) {
-	app.serverType = t
+	app.server.Type = t
 }
 
 // SetServerData sets the server data that will be broadcasted using service discovery to other servers
+// TODO need to specify in start
 func SetServerData(data map[string]string) {
-	app.serverData = data
+	app.server.Data = data
 }
 
 func startDefaultSD() {
@@ -148,7 +155,7 @@ func startDefaultSD() {
 		time.Duration(20)*time.Second,
 		time.Duration(60)*time.Second,
 		time.Duration(120)*time.Second,
-		cluster.NewServer(app.serverID, app.serverType, app.serverData),
+		app.server,
 	)
 	if err != nil {
 		log.Fatalf("error starting cluster service discovery component: %s", err.Error())
@@ -161,7 +168,7 @@ func startDefaultRPCServer() {
 	var err error
 	app.rpcServer = cluster.NewNatsRPCServer(
 		"nats://localhost:4222",
-		cluster.NewServer(app.serverID, app.serverType, app.serverData),
+		app.server,
 	)
 	if err != nil {
 		log.Fatalf("error starting cluster rpc server component: %s", err.Error())
@@ -174,7 +181,7 @@ func startDefaultRPCClient() {
 	var err error
 	app.rpcClient = cluster.NewNatsRPCClient(
 		"nats://localhost:4222",
-		cluster.NewServer(app.serverID, app.serverType, app.serverData),
+		app.server,
 	)
 	if err != nil {
 		log.Fatalf("error starting cluster rpc client component: %s", err.Error())
@@ -182,27 +189,25 @@ func startDefaultRPCClient() {
 }
 
 // Start starts the app
-func Start(clusterMode ...bool) {
-	if len(clusterMode) > 0 {
-		if clusterMode[0] == true {
-			if app.serviceDiscovery == nil {
-				log.Warn("creating default service discovery because cluster mode is enabled, if you want to specify yours, use nano.SetServiceDiscoveryClient")
-				startDefaultSD()
-			}
-			if app.rpcServer == nil {
-				log.Warn("creating default rpc server because cluster mode is enabled, if you want to specify yours, use nano.SetRPCServer")
-				startDefaultRPCServer()
-			}
-			if app.rpcClient == nil {
-				log.Warn("creating default rpc client because cluster mode is enabled, if you want to specify yours, use nano.SetRPCClient")
-				startDefaultRPCClient()
-			}
-			RegisterModule(app.serviceDiscovery, "serviceDiscovery")
-			RegisterModule(app.rpcServer, "rpcServer")
-			RegisterModule(app.rpcClient, "rpcClient")
-		}
+// TODO fix non cluster mode
+func Start(isFrontend bool) {
+	app.server.Frontend = isFrontend
+
+	if app.serviceDiscovery == nil {
+		log.Warn("creating default service discovery because cluster mode is enabled, if you want to specify yours, use nano.SetServiceDiscoveryClient")
+		startDefaultSD()
 	}
-	// on shotdown TODO now delete sv info
+	if app.rpcServer == nil {
+		log.Warn("creating default rpc server because cluster mode is enabled, if you want to specify yours, use nano.SetRPCServer")
+		startDefaultRPCServer()
+	}
+	if app.rpcClient == nil {
+		log.Warn("creating default rpc client because cluster mode is enabled, if you want to specify yours, use nano.SetRPCClient")
+		startDefaultRPCClient()
+		RegisterModule(app.serviceDiscovery, "serviceDiscovery")
+		RegisterModule(app.rpcServer, "rpcServer")
+		RegisterModule(app.rpcClient, "rpcClient")
+	}
 
 	listen()
 
@@ -234,7 +239,7 @@ func listen() {
 	// by SetTimerPrecision
 	globalTicker = time.NewTicker(timerPrecision)
 
-	log.Infof("starting server %s:%s", app.serverType, app.serverID)
+	log.Infof("starting server %s:%s", app.server.Type, app.server.ID)
 
 	// startup logic dispatcher
 	go handler.dispatch()
@@ -257,17 +262,24 @@ func listen() {
 	startModules()
 }
 
-// RPC makes a remote procedure call
-// TODO send a stryct with data and route
-func RPC(serverID string, data []byte) ([]byte, error) {
-	if app.rpcClient == nil {
-		return nil, fmt.Errorf("rpc client not initialized, are you running in cluster mode?")
-	}
-	sv, err := app.serviceDiscovery.GetServer(serverID)
+// TODO own file?
+func remoteCall(rpcType protos.RPCType, route *route.Route, session *session.Session, args []byte) ([]byte, error) {
+	svType := route.SvType
+	//TODO this logic should be elsewhere, routing should be changeable
+	serversOfType, err := app.serviceDiscovery.GetServersByType(svType)
 	if err != nil {
 		return nil, err
 	}
-	return app.rpcClient.Call(sv, "teste", data)
+
+	s := rand.NewSource(time.Now().Unix())
+	r := rand.New(s)
+	server := serversOfType[r.Intn(len(serversOfType))]
+
+	res, err := app.rpcClient.Call(rpcType, route, session, args, server)
+	if err != nil {
+		return nil, err
+	}
+	return res, err
 }
 
 // SetDictionary set routes map, TODO(warning): set dictionary in runtime would be a dangerous operation!!!!!!

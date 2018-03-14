@@ -111,19 +111,20 @@ func (r *Room) Message(s *session.Session, msg *UserMessage) error {
 	return r.group.Broadcast("onMessage", msg)
 }
 
-// SendRPC send
-func (r *Room) SendRPC(s *session.Session, msg *RPCMessage) error {
-	res, err := nano.RPC(msg.ServerID, []byte(msg.Data))
-	if err != nil {
-		fmt.Printf("rpc error: %s", err)
-		return err
-	}
-	fmt.Printf("rpc res %s", res)
-	return nil
-}
+//// SendRPC send
+//func (r *Room) SendRPC(s *session.Session, msg *RPCMessage) error {
+//	res, err := nano.RPC(msg.ServerID, []byte(msg.Data))
+//	if err != nil {
+//		fmt.Printf("rpc error: %s", err)
+//		return err
+//	}
+//	fmt.Printf("rpc res %s", res)
+//	return nil
+//}
 
 func main() {
 	port := flag.Int("port", 3250, "the port to listen")
+	svType := flag.String("type", "game", "the server type")
 	flag.Parse()
 
 	defer (func() {
@@ -131,6 +132,7 @@ func main() {
 	})()
 
 	nano.SetSerializer(json.NewSerializer())
+	nano.SetServerType(*svType)
 
 	// rewrite component and handler name
 	room := NewRoom()

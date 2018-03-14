@@ -90,7 +90,7 @@ func (sd *etcdServiceDiscovery) bootstrapServer(server *Server) error {
 	_, err := sd.cli.Put(
 		context.TODO(),
 		getKey(server.ID, server.Type),
-		server.GetDataAsJSONString(),
+		server.AsJSONString(),
 		clientv3.WithLease(sd.leaseID),
 	)
 	if err != nil {
@@ -157,7 +157,7 @@ func (sd *etcdServiceDiscovery) getServerFromEtcd(serverType, serverID string) (
 	if len(svEInfo.Kvs) == 0 {
 		return nil, fmt.Errorf("didn't found server: %s in etcd", svKey)
 	}
-	return parseServer(svEInfo.Kvs[0].Key, svEInfo.Kvs[0].Value)
+	return parseServer(svEInfo.Kvs[0].Value)
 }
 
 // GetServersByType returns a slice with all the servers of a certain type
@@ -259,15 +259,13 @@ func parseEtcdKey(key string) (string, string, error) {
 	return svType, svID, nil
 }
 
-func parseServer(key []byte, value []byte) (*Server, error) {
-	sv := string(key)
-	var svData map[string]string
-	err := json.Unmarshal(value, &svData)
+func parseServer(value []byte) (*Server, error) {
+	var sv *Server
+	err := json.Unmarshal(value, &sv)
 	if err != nil {
-		log.Warnf("failed to load data for server %s, error: %s", sv, err.Error())
+		log.Warnf("failed to load server %s, error: %s", sv, err.Error())
 	}
-	svType, svID, err := parseEtcdKey(sv)
-	return NewServer(svID, svType, svData), nil
+	return sv, nil
 }
 
 func (sd *etcdServiceDiscovery) printServers() {
@@ -358,7 +356,7 @@ func (sd *etcdServiceDiscovery) watchEtcdChanges() {
 					case clientv3.EventTypePut:
 						var sv *Server
 						var err error
-						if sv, err = parseServer(ev.Kv.Key, ev.Kv.Value); err != nil {
+						if sv, err = parseServer(ev.Kv.Value); err != nil {
 							log.Error(err)
 							continue
 						}
