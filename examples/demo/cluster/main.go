@@ -9,6 +9,7 @@ import (
 
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lonnng/nano"
 	"github.com/lonnng/nano/acceptor"
 	"github.com/lonnng/nano/component"
@@ -45,7 +46,7 @@ type (
 
 	// AllMembers contains all members uid
 	AllMembers struct {
-		Members []int64 `json:"members"`
+		Members []string `json:"members"`
 	}
 
 	// JoinResponse represents the result of joining room
@@ -89,12 +90,12 @@ func (r *Room) AfterInit() {
 
 // Join room
 func (r *Room) Join(s *session.Session, msg []byte) error {
-	fakeUID := s.ID() //just use s.ID as uid !!!
-	s.Bind(fakeUID)   // binding session uid
+	fakeUID := uuid.New().String() //just use s.ID as uid !!!
+	s.Bind(fakeUID)                // binding session uid
 
 	s.Push("onMembers", &AllMembers{Members: r.group.Members()})
 	// notify others
-	r.group.Broadcast("onNewUser", &NewUser{Content: fmt.Sprintf("New user: %d", s.ID())})
+	r.group.Broadcast("onNewUser", &NewUser{Content: fmt.Sprintf("New user: %d", fakeUID)})
 	// new user join group
 	r.group.Add(s) // add session to group
 
