@@ -31,6 +31,7 @@ import (
 // RPCServer interface
 type RPCServer interface {
 	module.Module
+	GetUnhandledRequestsChannel() chan *protos.Request
 }
 
 // RPCClient interface

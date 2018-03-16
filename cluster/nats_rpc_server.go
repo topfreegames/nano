@@ -22,23 +22,21 @@ package cluster
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/golang/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 	"github.com/lonnng/nano/protos"
 	nats "github.com/nats-io/go-nats"
 )
 
 // NatsRPCServer struct
 type NatsRPCServer struct {
-	connString            string
-	server                *Server
-	conn                  *nats.Conn
-	stopChan              chan bool
-	subChan               chan *nats.Msg
-	sub                   *nats.Subscription
-	processMsgConcurrency int
-	unhandledMessages     chan *nats.Msg
+	connString     string
+	server         *Server
+	conn           *nats.Conn
+	stopChan       chan bool
+	subChan        chan *nats.Msg
+	sub            *nats.Subscription
+	unhandledReqCh chan *protos.Request
 }
 
 // NewNatsRPCServer ctor
@@ -50,51 +48,41 @@ func NewNatsRPCServer(connectString string, server *Server) *NatsRPCServer {
 		// TODO configure max pending messages
 		subChan: make(chan *nats.Msg, 1000),
 		// TODO configure concurrency
-		processMsgConcurrency: 100,
-		unhandledMessages:     make(chan *nats.Msg),
+		unhandledReqCh: make(chan *protos.Request),
 	}
 	return ns
 }
 
 func (ns *NatsRPCServer) handleMessages() {
 	defer (func() {
-		close(ns.unhandledMessages)
+		close(ns.unhandledReqCh)
 		close(ns.subChan)
 	})()
 	for {
 		select {
 		case msg := <-ns.subChan:
-			ns.unhandledMessages <- msg
+			req := &protos.Request{}
+			err := proto.Unmarshal(msg.Data, req)
+			if err != nil {
+				// should answer rpc with an error
+				log.Error("error unmarshalling rpc message:", err.Error())
+				continue
+			}
+			ns.unhandledReqCh <- req
 		case <-ns.stopChan:
 			return
 		}
 	}
 }
 
-// TODO when dying need to die gracefully
-// TODO monitor dropped, chansize of subChan
-// TODO processar a mensagem e retornar resposta
-func (ns *NatsRPCServer) processUnhandledMessages(threadID int) {
-	for msg := range ns.unhandledMessages {
-		// TODO should deserializer be decoupled?
-		req := &protos.Request{}
-		err := proto.Unmarshal(msg.Data, req)
-		if err != nil {
-			// should answer rpc with an error
-			log.Error("error unmarshalling rpc message:", err.Error())
-			continue
-		}
-		log.Debugf("(%d) processing message %v", threadID, req.RequestID)
-		time.Sleep(time.Duration(5) * time.Second)
-	}
+// GetUnhandledRequestsChannel returns the channel that will receive unhandled messages
+func (ns *NatsRPCServer) GetUnhandledRequestsChannel() chan *protos.Request {
+	return ns.unhandledReqCh
 }
 
 // Init inits nats rpc server
 func (ns *NatsRPCServer) Init() error {
 	go ns.handleMessages()
-	for i := 0; i < ns.processMsgConcurrency; i++ {
-		go ns.processUnhandledMessages(i)
-	}
 	conn, err := setupNatsConn(ns.connString)
 	if err != nil {
 		return err

@@ -92,7 +92,7 @@ func newAgent(conn net.Conn) *agent {
 
 	// binding session
 	s := session.New(a)
-	s.frontendID = app.server.ID
+	s.FrontendID = app.server.ID
 	a.session = s
 	a.srv = reflect.ValueOf(s)
 

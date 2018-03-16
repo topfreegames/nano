@@ -333,7 +333,7 @@ func (h *handlerService) localProcess(agent *agent, route *route.Route, msg *mes
 		}
 	}
 
-	logger.Log.Debugf("UID=%d, Message={%s}, Data=%+v", agent.session.UID(), msg.String(), data)
+	log.Debugf("UID=%d, Message={%s}, Data=%+v", agent.session.UID(), msg.String(), data)
 
 	args := []reflect.Value{handler.Receiver, agent.srv, reflect.ValueOf(data)}
 	agent.chRecv <- unhandledMessage{lastMid, handler.Method, args}

@@ -260,6 +260,16 @@ func listen() {
 		log.Infof("listening with acceptor %s on addr %s", reflect.TypeOf(a), a.GetAddr())
 	}
 	startModules()
+
+	// this handles remote messages
+	// TODO probably this shouldnt be here :/
+	if app.rpcServer != nil {
+		// TODO config concurrency, should this be done this way?
+		processMsgConcurrency := 100
+		for i := 0; i < processMsgConcurrency; i++ {
+			go processRemoteMessages(i)
+		}
+	}
 }
 
 // TODO own file?

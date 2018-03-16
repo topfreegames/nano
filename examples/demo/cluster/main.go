@@ -112,6 +112,20 @@ func (r *Room) Message(s *session.Session, msg *UserMessage) error {
 	return r.group.Broadcast("onMessage", msg)
 }
 
+// Test1 test
+func (r *Room) Test1(s *session.Session, data []byte) error {
+	go func(s *session.Session) {
+		time.Sleep(time.Duration(5) * time.Second)
+		s.Response("okkay1")
+	}(s)
+	return nil
+}
+
+// Test2 test
+func (r *Room) Test2(s *session.Session, data []byte) error {
+	return s.Response("okkay2")
+}
+
 //// SendRPC send
 //func (r *Room) SendRPC(s *session.Session, msg *RPCMessage) error {
 //	res, err := nano.RPC(msg.ServerID, []byte(msg.Data))

@@ -52,7 +52,7 @@ type Session struct {
 	sync.RWMutex                            // protect data
 	id               int64                  // session global unique id
 	uid              string                 // binding user id
-	frontendID       string                 // the frontend server id that the user is connected to
+	FrontendID       string                 // the frontend server id that the user is connected to
 	lastTime         int64                  // last heartbeat time
 	entity           NetworkEntity          // low-level network entity
 	data             map[string]interface{} // session data store
