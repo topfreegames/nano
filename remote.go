@@ -36,6 +36,9 @@ func processRemoteMessages(threadID int) {
 		log.Debugf("(%d) processing message %v", threadID, req.RequestID)
 		switch {
 		case req.Type == protos.RPCType_Sys:
+			agent := newAgentRemote(req.Reply)
+			// TODO change requestID name
+			agent.lastMid = uint(req.RequestID)
 			r, err := route.Decode(req.Route)
 			if err != nil {
 				// TODO answer rpc with an error
@@ -65,6 +68,8 @@ func processRemoteMessages(threadID int) {
 			// need to create agent
 			//handler.processMessage()
 			// user request proxied from frontend server
+			args := []reflect.Value{h.Receiver, reflect.ValueOf(agent.session), reflect.ValueOf(data)}
+			pcall(h.Method, args)
 		case req.Type == protos.RPCType_User:
 			//TODO
 			break

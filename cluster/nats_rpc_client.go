@@ -52,6 +52,12 @@ func NewNatsRPCClient(connectString string, server *Server) *NatsRPCClient {
 	return ns
 }
 
+// Answer answers a remote method call
+// TODO handle errors (to the client)
+func (ns *NatsRPCClient) Answer(reply string, data []byte) error {
+	return ns.conn.Publish(reply, data)
+}
+
 // Call calls a method remotally
 // TODO use channel and create async Go method
 // TODO oh my, this is hacky! will it perform good?
@@ -91,6 +97,7 @@ func (ns *NatsRPCClient) Call(
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("OI, CAMILA", m)
 	return m.Data, nil
 }
 

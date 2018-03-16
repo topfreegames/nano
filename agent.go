@@ -58,6 +58,7 @@ type (
 		chDie           chan struct{}         // wait for close
 		chSend          chan pendingMessage   // push message queue
 		chRecv          chan unhandledMessage // unhandledMessages
+		chWrite         chan []byte           // write message to the clients
 		chStopWrite     chan struct{}         // stop writing messages
 		chStopHeartbeat chan struct{}         // stop heartbeats
 		chStopRead      chan struct{}         //stop reading
@@ -84,6 +85,7 @@ func newAgent(conn net.Conn) *agent {
 		chStopWrite:     make(chan struct{}),
 		chStopHeartbeat: make(chan struct{}),
 		chStopRead:      make(chan struct{}),
+		chWrite:         make(chan []byte, agentWriteBacklog),
 		lastAt:          time.Now().Unix(),
 		chSend:          make(chan pendingMessage, agentWriteBacklog),
 		chRecv:          make(chan unhandledMessage),
@@ -272,16 +274,15 @@ func (a *agent) read() {
 }
 
 func (a *agent) write() {
-	chWrite := make(chan []byte, agentWriteBacklog)
 	// clean func
 	defer func() {
 		close(a.chSend)
-		close(chWrite)
+		close(a.chWrite)
 	}()
 
 	for {
 		select {
-		case data := <-chWrite:
+		case data := <-a.chWrite:
 			// close agent while low-level conn broken
 			if _, err := a.conn.Write(data); err != nil {
 				logger.Log.Error(err.Error())
@@ -324,7 +325,7 @@ func (a *agent) write() {
 				logger.Log.Error(err)
 				break
 			}
-			chWrite <- p
+			a.chWrite <- p
 
 		case <-a.chStopWrite:
 			return

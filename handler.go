@@ -287,11 +287,14 @@ func (h *handlerService) remoteProcess(agent *agent, route *route.Route, msg *me
 	var res []byte
 	var err error
 	if res, err = remoteCall(protos.RPCType_Sys, route, agent.session, msg); err != nil {
+		// TODO: we should probably return the error to the client
 		log.Errorf(err.Error())
 		return
 	}
+	// TOOD CAMILA return to the client here (send to a.chWrite)
 	// TODO remove
 	fmt.Printf("cool, got %s\n", res)
+	agent.chWrite <- res
 }
 
 func (h *handlerService) localProcess(agent *agent, route *route.Route, msg *message.Message) {

@@ -59,6 +59,7 @@ type App struct {
 	serviceDiscovery cluster.ServiceDiscovery
 	rpcServer        cluster.RPCServer
 	rpcClient        cluster.RPCClient
+	onSessionBind    func(*session.Session)
 }
 
 var (
@@ -113,6 +114,11 @@ func SetHeartbeatTime(interval time.Duration) {
 
 // SetRPCServer to be used
 func SetRPCServer(s cluster.RPCServer) {
+	if reflect.TypeOf(s) == reflect.TypeOf(cluster.NatsRPCServer) {
+		session.SetOnSessionBind(func(s *session.Session) {
+
+		})
+	}
 	app.rpcServer = s
 }
 

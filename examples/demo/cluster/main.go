@@ -103,7 +103,6 @@ func (r *Room) Join(s *session.Session, msg []byte) error {
 	s.OnClose(func() {
 		r.group.Leave(s)
 	})
-
 	return s.Response(&JoinResponse{Result: "success"})
 }
 

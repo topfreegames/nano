@@ -42,6 +42,10 @@ type NetworkEntity interface {
 var (
 	//ErrIllegalUID represents a invalid uid
 	ErrIllegalUID = errors.New("illegal uid")
+	// OnSessionBind represents the function called after the session in bound
+	OnSessionBind func(s *Session)
+	// SessionsMap is a map containing the sessions
+	SessionsMap = map[string]*Session{}
 )
 
 // Session represents a client session which could storage temp data during low-level
@@ -69,6 +73,14 @@ func New(entity NetworkEntity) *Session {
 		lastTime:         time.Now().Unix(),
 		OnCloseCallbacks: []func(){},
 	}
+}
+
+// GetSessionByUID return a session bound to an user id
+func GetSessionByUID(uid string) *Session {
+	if val, ok := SessionsMap[uid]; ok {
+		return val
+	}
+	return nil
 }
 
 // Push message to client
@@ -110,12 +122,18 @@ func (s *Session) Bind(uid string) error {
 	}
 
 	s.uid = uid
+	// TODO should we overwrite or return an error if the session was already bound
+	SessionsMap[uid] = s
+	if OnSessionBind != nil {
+		OnSessionBind(s)
+	}
 	return nil
 }
 
 // OnClose adds the function it receives to the callbacks that will be called
 // when the session is closed
 func (s *Session) OnClose(c func()) {
+	delete(SessionsMap, s.UID())
 	s.OnCloseCallbacks = append(s.OnCloseCallbacks, c)
 }
 

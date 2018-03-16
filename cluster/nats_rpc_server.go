@@ -25,6 +25,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/lonnng/nano/protos"
+	"github.com/lonnng/nano/session"
 	nats "github.com/nats-io/go-nats"
 )
 
@@ -53,6 +54,25 @@ func NewNatsRPCServer(connectString string, server *Server) *NatsRPCServer {
 	return ns
 }
 
+func GetUserMessagesTopic(uid string) string {
+	return fmt.Sprintf("nano/user/%s/push", uid)
+}
+
+func (ns *NatsRPCServer) subscribeToUserMessages(uid string) {
+	// TODO maybe use channels to control parallelism
+	ns.conn.Subscribe(GetUserMessagesTopic(uid), func(msg *nats.Msg) {
+		s := session.GetSessionByUID(uid)
+		if s != nil {
+			push := &protos.Push{}
+			err := proto.Unmarshal(msg.Data, push)
+			if err != nil {
+				log.Error("error unmarshalling push:", err.Error())
+			}
+			s.Push(push.Route, push.Data)
+		}
+	})
+}
+
 func (ns *NatsRPCServer) handleMessages() {
 	defer (func() {
 		close(ns.unhandledReqCh)
@@ -68,6 +88,7 @@ func (ns *NatsRPCServer) handleMessages() {
 				log.Error("error unmarshalling rpc message:", err.Error())
 				continue
 			}
+			req.Reply = msg.Reply
 			ns.unhandledReqCh <- req
 		case <-ns.stopChan:
 			return
