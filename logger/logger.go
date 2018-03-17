@@ -1,6 +1,8 @@
 package logger
 
-import "github.com/sirupsen/logrus"
+import (
+	"github.com/sirupsen/logrus"
+)
 
 //Logger represents  the log interface
 type Logger interface {
@@ -26,10 +28,17 @@ type Logger interface {
 }
 
 // Log is the default logger
-var Log Logger = logrus.New()
+var Log = initLogger()
 
-func init() {
-	Log.(*logrus.Logger).SetLevel(logrus.DebugLevel)
+func initLogger() Logger {
+	plog := logrus.New()
+	plog.Formatter = new(logrus.JSONFormatter)
+	plog.Level = logrus.DebugLevel
+
+	log := plog.WithFields(logrus.Fields{
+		"source": "nano",
+	})
+	return log
 }
 
 // SetLogger rewrites the default logger
