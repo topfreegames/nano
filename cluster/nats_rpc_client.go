@@ -77,13 +77,17 @@ func (ns *NatsRPCClient) Call(
 		mid = msg.ID
 	}
 
+	// TODO need to send session data, will need to make major encode hacking
 	req := protos.Request{
-		Route:      route.String(),
-		SessionID:  session.ID(),
-		RequestID:  uint64(mid),
-		Type:       rpcType,
-		Data:       msg.Data,
-		FrontendID: ns.server.ID,
+		Type: rpcType,
+		Session: &protos.Session{
+			ID: session.ID(),
+		},
+		Msg: &protos.Msg{
+			ID:    uint64(mid),
+			Route: route.String(),
+			Data:  msg.Data,
+		},
 	}
 
 	var marshalledData []byte

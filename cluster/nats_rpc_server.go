@@ -88,7 +88,7 @@ func (ns *NatsRPCServer) handleMessages() {
 				log.Error("error unmarshalling rpc message:", err.Error())
 				continue
 			}
-			req.Reply = msg.Reply
+			req.Msg.Reply = msg.Reply
 			ns.unhandledReqCh <- req
 		case <-ns.stopChan:
 			return

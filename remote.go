@@ -33,36 +33,36 @@ func processRemoteMessages(threadID int) {
 	// TODO need to monitor stuff here to guarantee messages are not being dropped
 	for req := range app.rpcServer.GetUnhandledRequestsChannel() {
 		// TODO should deserializer be decoupled?
-		log.Debugf("(%d) processing message %v", threadID, req.RequestID)
+		log.Debugf("(%d) processing message %v", threadID, req.GetMsg().GetID())
 		switch {
 		case req.Type == protos.RPCType_Sys:
-			agent := newAgentRemote(req.Reply)
+			agent := newAgentRemote(req.GetMsg().GetReply())
 			// TODO change requestID name
-			agent.lastMid = uint(req.RequestID)
-			r, err := route.Decode(req.Route)
+			agent.lastMid = uint(req.GetMsg().GetID())
+			r, err := route.Decode(req.GetMsg().GetRoute())
 			if err != nil {
 				// TODO answer rpc with an error
 				continue
 			}
 			h, ok := handler.handlers[fmt.Sprintf("%s.%s", r.Service, r.Method)]
 			if !ok {
-				logger.Log.Warnf("nano/handler: %s not found(forgot registered?)", req.Route)
+				logger.Log.Warnf("nano/handler: %s not found(forgot registered?)", req.GetMsg().GetRoute())
 				// TODO answer rpc with an error
 				continue
 			}
 			var data interface{}
 			if h.IsRawArg {
-				data = req.Data
+				data = req.GetMsg().GetData()
 			} else {
 				data = reflect.New(h.Type.Elem()).Interface()
-				err := app.serializer.Unmarshal(req.Data, data)
+				err := app.serializer.Unmarshal(req.GetMsg().GetData(), data)
 				if err != nil {
 					logger.Log.Error("deserialize error", err.Error())
 					return
 				}
 			}
 
-			log.Debugf("SID=%d, Data=%s", req.SessionID, data)
+			log.Debugf("SID=%d, Data=%s", req.GetSession().GetID(), data)
 			// backend session
 
 			// need to create agent

@@ -114,12 +114,13 @@ func SetHeartbeatTime(interval time.Duration) {
 
 // SetRPCServer to be used
 func SetRPCServer(s cluster.RPCServer) {
-	if reflect.TypeOf(s) == reflect.TypeOf(cluster.NatsRPCServer) {
-		session.SetOnSessionBind(func(s *session.Session) {
+	//TODO
+	//if reflect.TypeOf(s) == reflect.TypeOf(cluster.NatsRPCServer) {
+	//	session.SetOnSessionBind(func(s *session.Session) {
 
-		})
-	}
-	app.rpcServer = s
+	//	})
+	//}
+	//app.rpcServer = s
 }
 
 // SetRPCClient to be used
