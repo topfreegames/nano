@@ -22,17 +22,12 @@ package session
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/lonnng/nano/service"
 )
-
-type sessionsMap struct {
-	sessions map[string]*Session
-}
 
 // NetworkEntity represent low-level network instance
 type NetworkEntity interface {
@@ -49,8 +44,7 @@ var (
 	ErrIllegalUID = errors.New("illegal uid")
 	// OnSessionBind represents the function called after the session in bound
 	OnSessionBind func(s *Session)
-	sessions      *sessionsMap // sessions is a map containing the sessions map
-	once          sync.Once
+	sessionsMap   = make(map[string]*Session)
 )
 
 // Session represents a client session which could storage temp data during low-level
@@ -79,25 +73,9 @@ func New(entity NetworkEntity) *Session {
 	}
 }
 
-// GetSessionsMap gets sessionsmap
-func GetSessionsMap() map[string]*Session {
-	fmt.Println("---> GetSessionsMap")
-	once.Do(func() {
-		fmt.Println("---> GetSessionsMap ONCE!")
-		sMap := make(map[string]*Session)
-		sessions = &sessionsMap{
-			sessions: sMap,
-		}
-	})
-	fmt.Printf("<--- SessionsMap %v\n", sessions.sessions)
-	return sessions.sessions
-}
-
 // GetSessionByUID return a session bound to an user id
 func GetSessionByUID(uid string) *Session {
-	sMap := GetSessionsMap()
-	fmt.Printf("GetSessionByUID SessionsMap %v", sMap)
-	if val, ok := sMap[uid]; ok {
+	if val, ok := sessionsMap[uid]; ok {
 		return val
 	}
 	return nil
@@ -150,9 +128,7 @@ func (s *Session) Bind(uid string) error {
 	s.uid = uid
 	// TODO should we overwrite or return an error if the session was already bound
 	// TODO MUTEX OR SYNCMAP!
-	sMap := GetSessionsMap()
-	sMap[uid] = s
-	fmt.Printf("CAMILA 123 SessionsMap %v \n", sMap)
+	sessionsMap[uid] = s
 	if OnSessionBind != nil {
 		OnSessionBind(s)
 	}
@@ -162,14 +138,13 @@ func (s *Session) Bind(uid string) error {
 // OnClose adds the function it receives to the callbacks that will be called
 // when the session is closed
 func (s *Session) OnClose(c func()) {
-	sMap := GetSessionsMap()
-	delete(sMap, s.UID())
 	s.OnCloseCallbacks = append(s.OnCloseCallbacks, c)
 }
 
 // Close terminate current session, session related data will not be released,
 // all related data should be Clear explicitly in Session closed callback
 func (s *Session) Close() {
+	delete(sessionsMap, s.UID())
 	s.entity.Close()
 }
 
