@@ -25,7 +25,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/lonnng/nano/protos"
-	"github.com/lonnng/nano/session"
 	nats "github.com/nats-io/go-nats"
 )
 
@@ -38,6 +37,7 @@ type NatsRPCServer struct {
 	subChan        chan *nats.Msg
 	sub            *nats.Subscription
 	unhandledReqCh chan *protos.Request
+	userPushCh     chan *protos.Push
 }
 
 // NewNatsRPCServer ctor
@@ -50,6 +50,7 @@ func NewNatsRPCServer(connectString string, server *Server) *NatsRPCServer {
 		subChan: make(chan *nats.Msg, 1000),
 		// TODO configure concurrency
 		unhandledReqCh: make(chan *protos.Request),
+		userPushCh:     make(chan *protos.Push),
 	}
 	return ns
 }
@@ -64,15 +65,12 @@ func (ns *NatsRPCServer) SubscribeToUserMessages(uid string) {
 	// TODO maybe use channels to control parallelism
 	fmt.Printf("subscribing to %s", GetUserMessagesTopic(uid))
 	ns.conn.Subscribe(GetUserMessagesTopic(uid), func(msg *nats.Msg) {
-		s := session.GetSessionByUID(uid)
-		if s != nil {
-			push := &protos.Push{}
-			err := proto.Unmarshal(msg.Data, push)
-			if err != nil {
-				log.Error("error unmarshalling push:", err.Error())
-			}
-			s.Push(push.Route, push.Data)
+		push := &protos.Push{}
+		err := proto.Unmarshal(msg.Data, push)
+		if err != nil {
+			log.Error("error unmarshalling push:", err.Error())
 		}
+		ns.userPushCh <- push
 	})
 }
 
@@ -102,6 +100,11 @@ func (ns *NatsRPCServer) handleMessages() {
 // GetUnhandledRequestsChannel returns the channel that will receive unhandled messages
 func (ns *NatsRPCServer) GetUnhandledRequestsChannel() chan *protos.Request {
 	return ns.unhandledReqCh
+}
+
+// GetUserPushChannel returns the channel that will receive user pushs
+func (ns *NatsRPCServer) GetUserPushChannel() chan *protos.Push {
+	return ns.userPushCh
 }
 
 // Init inits nats rpc server

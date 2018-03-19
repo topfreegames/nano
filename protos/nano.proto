@@ -9,7 +9,8 @@ enum RPCType {
 
 message Push {
   string Route = 1;
-  bytes Data = 2;
+  string Uid = 2;
+  bytes Data = 3;
 }
 
 message Session {

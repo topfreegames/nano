@@ -24,6 +24,7 @@ import (
 	"net"
 	"reflect"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/lonnng/nano/cluster"
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/internal/packet"
@@ -66,7 +67,7 @@ func (a *agentRemote) Push(route string, v interface{}) error {
 			a.session.ID(), a.session.UID(), route, v)
 	}
 
-	return a.send(
+	return a.sendPush(
 		pendingMessage{typ: message.Push, route: route, payload: v},
 		cluster.GetUserMessagesTopic(a.session.UID()),
 	)
@@ -97,10 +98,10 @@ func (a *agentRemote) ResponseMID(mid uint, v interface{}) error {
 func (a *agentRemote) Close() error         { return nil }
 func (a *agentRemote) RemoteAddr() net.Addr { return nil }
 
-func (a *agentRemote) send(m pendingMessage, to string) (err error) {
+func (a *agentRemote) serialize(m pendingMessage) ([]byte, error) {
 	payload, err := serializeOrRaw(m.payload)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// construct message and encode
@@ -112,14 +113,39 @@ func (a *agentRemote) send(m pendingMessage, to string) (err error) {
 	}
 	em, err := msg.Encode()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// packet encode
 	p, err := app.packetEncoder.Encode(packet.Data, em)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	return p, err
+}
+
+func (a *agentRemote) send(m pendingMessage, to string) (err error) {
+	p, err := a.serialize(m)
+	if err != nil {
+		return err
+	}
 	return app.rpcClient.Answer(to, p)
+}
+
+func (a *agentRemote) sendPush(m pendingMessage, to string) (err error) {
+	payload, err := serializeOrRaw(m.payload)
+	if err != nil {
+		return err
+	}
+	push := &protos.Push{
+		Route: m.route,
+		Uid:   a.session.UID(),
+		Data:  payload,
+	}
+	msg, err := proto.Marshal(push)
+	if err != nil {
+		return err
+	}
+	return app.rpcClient.Answer(to, msg)
 }

@@ -291,7 +291,7 @@ func (h *handlerService) remoteProcess(agent *agent, route *route.Route, msg *me
 		log.Errorf(err.Error())
 		return
 	}
-	// TOOD CAMILA return to the client here (send to a.chWrite)
+	// TODO CAMILA return to the client here (send to a.chWrite)
 	// TODO remove
 	fmt.Printf("cool, got %s\n", res)
 	agent.chWrite <- res

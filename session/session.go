@@ -22,12 +22,17 @@ package session
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/lonnng/nano/service"
 )
+
+type sessionsMap struct {
+	sessions map[string]*Session
+}
 
 // NetworkEntity represent low-level network instance
 type NetworkEntity interface {
@@ -44,8 +49,8 @@ var (
 	ErrIllegalUID = errors.New("illegal uid")
 	// OnSessionBind represents the function called after the session in bound
 	OnSessionBind func(s *Session)
-	// SessionsMap is a map containing the sessions
-	SessionsMap = make(map[string]*Session)
+	sessions      *sessionsMap // sessions is a map containing the sessions map
+	once          sync.Once
 )
 
 // Session represents a client session which could storage temp data during low-level
@@ -74,9 +79,25 @@ func New(entity NetworkEntity) *Session {
 	}
 }
 
+// GetSessionsMap gets sessionsmap
+func GetSessionsMap() map[string]*Session {
+	fmt.Println("---> GetSessionsMap")
+	once.Do(func() {
+		fmt.Println("---> GetSessionsMap ONCE!")
+		sMap := make(map[string]*Session)
+		sessions = &sessionsMap{
+			sessions: sMap,
+		}
+	})
+	fmt.Printf("<--- SessionsMap %v\n", sessions.sessions)
+	return sessions.sessions
+}
+
 // GetSessionByUID return a session bound to an user id
 func GetSessionByUID(uid string) *Session {
-	if val, ok := SessionsMap[uid]; ok {
+	sMap := GetSessionsMap()
+	fmt.Printf("GetSessionByUID SessionsMap %v", sMap)
+	if val, ok := sMap[uid]; ok {
 		return val
 	}
 	return nil
@@ -128,7 +149,10 @@ func (s *Session) Bind(uid string) error {
 
 	s.uid = uid
 	// TODO should we overwrite or return an error if the session was already bound
-	SessionsMap[uid] = s
+	// TODO MUTEX OR SYNCMAP!
+	sMap := GetSessionsMap()
+	sMap[uid] = s
+	fmt.Printf("CAMILA 123 SessionsMap %v \n", sMap)
 	if OnSessionBind != nil {
 		OnSessionBind(s)
 	}
@@ -138,7 +162,8 @@ func (s *Session) Bind(uid string) error {
 // OnClose adds the function it receives to the callbacks that will be called
 // when the session is closed
 func (s *Session) OnClose(c func()) {
-	delete(SessionsMap, s.UID())
+	sMap := GetSessionsMap()
+	delete(sMap, s.UID())
 	s.OnCloseCallbacks = append(s.OnCloseCallbacks, c)
 }
 

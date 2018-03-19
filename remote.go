@@ -27,7 +27,19 @@ import (
 	"github.com/lonnng/nano/logger"
 	"github.com/lonnng/nano/protos"
 	"github.com/lonnng/nano/route"
+	"github.com/lonnng/nano/session"
 )
+
+// TODO: probably handle concurrency (threadID?)
+func processUserPush() {
+	for push := range app.rpcServer.GetUserPushChannel() {
+		s := session.GetSessionByUID(push.GetUid())
+		fmt.Printf("Got PUSH message %v %v\n", push, s == nil)
+		if s != nil {
+			s.Push(push.Route, push.Data)
+		}
+	}
+}
 
 func processRemoteMessages(threadID int) {
 	// TODO need to monitor stuff here to guarantee messages are not being dropped

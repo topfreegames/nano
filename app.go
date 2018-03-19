@@ -275,6 +275,8 @@ func listen() {
 		processMsgConcurrency := 100
 		for i := 0; i < processMsgConcurrency; i++ {
 			go processRemoteMessages(i)
+			// TODO: use same parellelism?
+			go processUserPush()
 		}
 	}
 }

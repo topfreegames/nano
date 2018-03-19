@@ -32,6 +32,8 @@ import (
 type RPCServer interface {
 	module.Module
 	GetUnhandledRequestsChannel() chan *protos.Request
+	// TODO user pushs and requests can be merged and processing would have a switch
+	GetUserPushChannel() chan *protos.Push
 }
 
 // RPCClient interface
