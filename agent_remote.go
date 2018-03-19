@@ -28,6 +28,7 @@ import (
 	"github.com/lonnng/nano/internal/message"
 	"github.com/lonnng/nano/internal/packet"
 	"github.com/lonnng/nano/logger"
+	"github.com/lonnng/nano/protos"
 	"github.com/lonnng/nano/session"
 )
 
@@ -41,7 +42,7 @@ type agentRemote struct {
 }
 
 // Create new agentRemote instance
-func newAgentRemote(reply string) *agentRemote {
+func newAgentRemote(sess *protos.Session, reply string) *agentRemote {
 	a := &agentRemote{
 		chDie: make(chan struct{}),
 		reply: reply, // TODO this is ugly
@@ -49,6 +50,7 @@ func newAgentRemote(reply string) *agentRemote {
 
 	// binding session
 	s := session.New(a)
+	s.SetUID(sess.GetUid())
 	a.session = s
 
 	return a
@@ -66,8 +68,7 @@ func (a *agentRemote) Push(route string, v interface{}) error {
 
 	return a.send(
 		pendingMessage{typ: message.Push, route: route, payload: v},
-		// TODO: cava continue from here
-		cluster.GetUserMessagesTopic(""),
+		cluster.GetUserMessagesTopic(a.session.UID()),
 	)
 }
 

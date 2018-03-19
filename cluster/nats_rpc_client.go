@@ -81,7 +81,8 @@ func (ns *NatsRPCClient) Call(
 	req := protos.Request{
 		Type: rpcType,
 		Session: &protos.Session{
-			ID: session.ID(),
+			ID:  session.ID(),
+			Uid: session.UID(),
 		},
 		Msg: &protos.Msg{
 			ID:    uint64(mid),

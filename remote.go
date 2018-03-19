@@ -36,7 +36,7 @@ func processRemoteMessages(threadID int) {
 		log.Debugf("(%d) processing message %v", threadID, req.GetMsg().GetID())
 		switch {
 		case req.Type == protos.RPCType_Sys:
-			agent := newAgentRemote(req.GetMsg().GetReply())
+			agent := newAgentRemote(req.GetSession(), req.GetMsg().GetReply())
 			// TODO change requestID name
 			agent.lastMid = uint(req.GetMsg().GetID())
 			r, err := route.Decode(req.GetMsg().GetRoute())
@@ -57,6 +57,7 @@ func processRemoteMessages(threadID int) {
 				data = reflect.New(h.Type.Elem()).Interface()
 				err := app.serializer.Unmarshal(req.GetMsg().GetData(), data)
 				if err != nil {
+					// TODO answer with error
 					logger.Log.Error("deserialize error", err.Error())
 					return
 				}

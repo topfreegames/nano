@@ -90,8 +90,11 @@ func (r *Room) AfterInit() {
 
 // Join room
 func (r *Room) Join(s *session.Session, msg []byte) error {
-	fakeUID := uuid.New().String() //just use s.ID as uid !!!
-	s.Bind(fakeUID)                // binding session uid
+	var fakeUID string
+	if s.UID() == "" {
+		fakeUID := uuid.New().String() //just use s.ID as uid !!!
+		s.Bind(fakeUID)                // binding session uid
+	}
 
 	s.Push("onMembers", &AllMembers{Members: r.group.Members()})
 	// notify others

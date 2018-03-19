@@ -115,12 +115,12 @@ func SetHeartbeatTime(interval time.Duration) {
 // SetRPCServer to be used
 func SetRPCServer(s cluster.RPCServer) {
 	//TODO
-	//if reflect.TypeOf(s) == reflect.TypeOf(cluster.NatsRPCServer) {
-	//	session.SetOnSessionBind(func(s *session.Session) {
-
-	//	})
-	//}
-	//app.rpcServer = s
+	app.rpcServer = s
+	if reflect.TypeOf(s) == reflect.TypeOf(&cluster.NatsRPCServer{}) {
+		session.SetOnSessionBind(func(s *session.Session) {
+			app.rpcServer.(*cluster.NatsRPCServer).SubscribeToUserMessages(s.UID())
+		})
+	}
 }
 
 // SetRPCClient to be used
@@ -173,10 +173,10 @@ func startDefaultRPCServer() {
 	// initialize default rpc server
 	// TODO remove this, force specifying
 	var err error
-	app.rpcServer = cluster.NewNatsRPCServer(
+	SetRPCServer(cluster.NewNatsRPCServer(
 		"nats://localhost:4222",
 		app.server,
-	)
+	))
 	if err != nil {
 		log.Fatalf("error starting cluster rpc server component: %s", err.Error())
 	}

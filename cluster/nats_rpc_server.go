@@ -54,12 +54,15 @@ func NewNatsRPCServer(connectString string, server *Server) *NatsRPCServer {
 	return ns
 }
 
+// GetUserMessagesTopic get the topic for user
 func GetUserMessagesTopic(uid string) string {
 	return fmt.Sprintf("nano/user/%s/push", uid)
 }
 
-func (ns *NatsRPCServer) subscribeToUserMessages(uid string) {
+// SubscribeToUserMessages subscribes to user msg channel
+func (ns *NatsRPCServer) SubscribeToUserMessages(uid string) {
 	// TODO maybe use channels to control parallelism
+	fmt.Printf("subscribing to %s", GetUserMessagesTopic(uid))
 	ns.conn.Subscribe(GetUserMessagesTopic(uid), func(msg *nats.Msg) {
 		s := session.GetSessionByUID(uid)
 		if s != nil {

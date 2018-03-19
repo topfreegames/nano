@@ -45,7 +45,7 @@ var (
 	// OnSessionBind represents the function called after the session in bound
 	OnSessionBind func(s *Session)
 	// SessionsMap is a map containing the sessions
-	SessionsMap = map[string]*Session{}
+	SessionsMap = make(map[string]*Session)
 )
 
 // Session represents a client session which could storage temp data during low-level
@@ -56,7 +56,6 @@ type Session struct {
 	sync.RWMutex                            // protect data
 	id               int64                  // session global unique id
 	uid              string                 // binding user id
-	FrontendID       string                 // the frontend server id that the user is connected to
 	lastTime         int64                  // last heartbeat time
 	entity           NetworkEntity          // low-level network entity
 	data             map[string]interface{} // session data store
@@ -108,6 +107,12 @@ func (s *Session) ID() int64 {
 // TODO this used to use atomic, is it necessary?
 func (s *Session) UID() string {
 	return s.uid
+}
+
+// SetUID sets uid but without binding, TODO remove this method
+// Better to have a backend session type
+func (s *Session) SetUID(uid string) {
+	s.uid = uid
 }
 
 // MID returns the last message id
@@ -162,6 +167,11 @@ func (s *Session) Set(key string, value interface{}) {
 	defer s.Unlock()
 
 	s.data[key] = value
+}
+
+// SetOnSessionBind sets the method to be called when a session is bound
+func SetOnSessionBind(f func(s *Session)) {
+	OnSessionBind = f
 }
 
 // HasKey decides whether a key has associated value
